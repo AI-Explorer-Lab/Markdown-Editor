@@ -115,7 +115,10 @@ if (process.env.NODE_ENV === "production") {
 } else {
   const { createServer } = await import("vite");
   const vite = await createServer({
-    server: { middlewareMode: true, hmr: { host: "127.0.0.1" } },
+    server: {
+      middlewareMode: true,
+      hmr: { host: "127.0.0.1", port: port + 20000 },
+    },
     appType: "spa",
   });
   app.use(vite.middlewares);

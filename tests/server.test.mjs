@@ -51,3 +51,61 @@ test("symbolic links cannot expose outside content", async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("appearance snapshots participate in revision checks and remain separate from Markdown", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "markdown-styles-"));
+  try {
+    const s = createStore(root);
+    const appearance = {
+      theme: "plain",
+      custom: {
+        version: 1,
+        base: "plain",
+        name: "Blue",
+        values: { accent: "#123abc" },
+      },
+      fontSize: 16,
+      lineHeight: 1.8,
+    };
+    const first = await s.save({
+      name: "article",
+      content: "# Hello",
+      appearance,
+    });
+    assert.deepEqual((await s.read("article")).appearance, appearance);
+    assert.equal(
+      await fs.readFile(path.join(root, "article.md"), "utf8"),
+      "# Hello",
+    );
+    const changed = { ...appearance, fontSize: 18 };
+    const second = await s.save({
+      name: "article",
+      content: "# Hello",
+      appearance: changed,
+      baseRevision: first.revision,
+    });
+    assert.notEqual(first.revision, second.revision);
+    await assert.rejects(
+      s.save({
+        name: "article",
+        content: "# Overwrite",
+        appearance,
+        baseRevision: first.revision,
+      }),
+      { status: 409 },
+    );
+    await s.save({
+      name: "article",
+      content: "# New text",
+      baseRevision: second.revision,
+    });
+    assert.deepEqual((await s.read("article")).appearance, changed);
+    await fs.symlink(
+      "/etc/hosts",
+      path.join(root, ".styles", "unsafe.md.json"),
+    );
+    await assert.rejects(s.save({ name: "unsafe", content: "x", appearance }));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

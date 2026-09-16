@@ -1,5 +1,6 @@
 import { toPng } from "html-to-image";
 import JSZip from "jszip";
+import { isDark } from "./customThemes";
 import { normalizeWechatTextRuns } from "./wechat";
 export type Output = "html" | "wechat" | "zhihu" | "pdf";
 const properties = [
@@ -12,6 +13,7 @@ const properties = [
   "font-style",
   "line-height",
   "letter-spacing",
+  "text-indent",
   "text-align",
   "text-decoration",
   "white-space",
@@ -46,11 +48,7 @@ const blobData = (blob: Blob) =>
 
 // Computed browser styles are not a portable publishing format. WeChat flags
 // logical alignment and text gradients, and may change font sizes on paste.
-function applyWechatStyles(
-  copy: HTMLElement,
-  computed: CSSStyleDeclaration,
-  theme: string | undefined,
-) {
+function applyWechatStyles(copy: HTMLElement, computed: CSSStyleDeclaration) {
   // Explicit unitless spacing survives font-size changes and does not depend
   // on the receiving editor's default CSS. 1.6 is our readability floor,
   // not a threshold mandated by the WeChat specification.
@@ -75,8 +73,12 @@ function applyWechatStyles(
 
   if (/gradient\(/i.test(computed.backgroundImage)) {
     copy.style.backgroundImage = "none";
-    if (theme === "amber" && copy.tagName === "H2") {
-      copy.style.borderBottom = "5px solid #f5cc70";
+    if (
+      computed.backgroundImage.includes("rgba(0, 0, 0, 0)") &&
+      /^H[1-6]$/.test(copy.tagName)
+    ) {
+      const colors = computed.backgroundImage.match(/rgb\([^)]+\)/g);
+      copy.style.borderBottom = `5px solid ${colors?.at(-1) || computed.color}`;
       copy.style.paddingBottom = "0.12em";
     } else {
       copy.style.backgroundColor =
@@ -91,6 +93,7 @@ export async function prepareArticle(article: HTMLElement, output: Output) {
   if (output === "pdf" && article.querySelector(".broken-image"))
     throw new Error("文章包含未能加载的图片，请修复图片后再导出 PDF。");
   await document.fonts.ready;
+  const adjustments: string[] = [];
   const clone = article.cloneNode(true) as HTMLElement;
   const originals = [article, ...article.querySelectorAll<HTMLElement>("*")];
   const copies = [clone, ...clone.querySelectorAll<HTMLElement>("*")];
@@ -100,10 +103,16 @@ export async function prepareArticle(article: HTMLElement, output: Output) {
     properties.forEach((p) =>
       copy.style.setProperty(p, style.getPropertyValue(p)),
     );
-    if (output === "wechat")
-      applyWechatStyles(copy, style, article.dataset.theme);
+    if (output === "wechat") applyWechatStyles(copy, style);
     if (el.tagName === "IMG") copy.style.maxWidth = "100%";
   });
+  if (
+    output === "wechat" &&
+    originals.some((el) =>
+      /gradient\(/i.test(getComputedStyle(el).backgroundImage),
+    )
+  )
+    adjustments.push("渐变已转换为纯色或实线装饰。");
   // Rasterize formulas and diagrams before leaving the page: exported documents need no JS or fonts.
   const visualOriginals = article.querySelectorAll<HTMLElement>(
     ".math-inline,.math-block,.diagram",
@@ -195,7 +204,8 @@ export async function prepareArticle(article: HTMLElement, output: Output) {
     clone
       .querySelectorAll<HTMLElement>("pre code")
       .forEach((p) => (p.style.whiteSpace = "pre-wrap"));
-    if (article.dataset.theme === "night") {
+    if (isDark(getComputedStyle(article).backgroundColor)) {
+      adjustments.push("深色文章背景已转换为浅色，请检查导出效果。");
       clone.style.backgroundColor = "#fff";
       clone.style.color = "#283a40";
       clone.querySelectorAll<HTMLElement>("*").forEach((e) => {
@@ -248,6 +258,7 @@ export async function prepareArticle(article: HTMLElement, output: Output) {
     html: clone.outerHTML,
     text: article.innerText,
     warnings,
+    adjustments,
     imageCount: clone.querySelectorAll("img").length,
   };
 }

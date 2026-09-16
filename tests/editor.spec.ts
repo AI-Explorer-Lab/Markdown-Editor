@@ -1,3 +1,4 @@
+import { openThemes } from "./theme-panel";
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -14,7 +15,8 @@ test("editor renders all syntax and distinct themes without changing source", as
   await page.goto("/");
   await expect(page.locator(".article .diagram svg")).toBeVisible();
   await expect(page.locator(".article .diagram svg")).toContainText("记录灵感");
-  await expect(page.getByRole("button", { name: /主题$/ })).toHaveCount(10);
+  await openThemes(page);
+  await expect(page.locator(".theme-grid button")).toHaveCount(10);
   const source =
     "# 标题\n\n[TOC]\n\n## 子标题\n\n## 子标题\n\n**粗体** *斜体* ~~删除~~ `inline`\n\n> 引用\n>\n> - 嵌套\n\n3. 三\n4. 四\n\n- [x] 已完成\n- [ ] 未完成\n\n|左|右|\n|:--|--:|\n|a|b|\n\n$$\nx^2 + y^2 = z^2\n$$\n\n公式 $E=mc^2$ 和价格 $5。\n\n```mermaid\nflowchart LR\n A --> B\n```\n\n脚注[^1]\n\n[^1]: 注释\n\n---\n\n<script>alert(1)</script>";
   await setSource(page, source);
@@ -44,8 +46,12 @@ test("editor renders all syntax and distinct themes without changing source", as
     "报刊",
     "夜航",
   ]) {
+    await openThemes(page);
     await page
       .getByRole("button", { name: name + "主题", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "应用这个风格", exact: true })
       .click();
     fonts.add(
       await page
@@ -74,7 +80,7 @@ test("first save binds a file and keyboard save overwrites it; upload survives r
   try {
     await page.goto("/");
     await setSource(page, "# 保存验证\n\nfirst");
-    await page.getByRole("button", { name: "保存 ⌘S", exact: true }).click();
+    await page.getByRole("button", { name: "保存", exact: true }).click();
     await page.getByRole("textbox", { name: "文件名" }).fill(name);
     await page.getByRole("button", { name: "保存文章", exact: true }).click();
     await expect(page.locator(".save-status")).toHaveText("已保存");
@@ -109,6 +115,9 @@ test("first save binds a file and keyboard save overwrites it; upload survives r
     ).toHaveLength(1);
   } finally {
     await fs.rm(path.join("paper", name + ".md"), { force: true });
+    await fs.rm(path.join("paper", ".styles", name + ".md.json"), {
+      force: true,
+    });
     if (asset) await fs.rm(path.join("paper", asset), { force: true });
   }
 });
@@ -145,7 +154,9 @@ test("clipboard has separate rich HTML adapters and layout stays within viewport
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await setSource(page, "# 复制验证\n\n## 二级\n\n> 引用\n\n**重点**");
+  await openThemes(page);
   await page.getByRole("button", { name: "海盐主题", exact: true }).click();
+  await page.getByRole("button", { name: "应用这个风格", exact: true }).click();
   await page.getByRole("button", { name: "复制到公众号", exact: true }).click();
   await expect(page.getByRole("status").last()).toContainText("已复制");
   const read = () =>
@@ -160,7 +171,7 @@ test("clipboard has separate rich HTML adapters and layout stays within viewport
   expect(wechat).not.toEqual(zhihu);
   expect(wechat).toContain("复制验证");
   const sizes = await page
-    .locator(".editing-pane,.preview-pane,.theme-panel")
+    .locator(".editing-pane,.preview-pane")
     .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
   expect(sizes.every((n) => n > 200)).toBeTruthy();
   await page.screenshot({
@@ -226,7 +237,9 @@ test("pasted and dropped images insert local resources; bad image and link remai
     await expect(page.locator(".broken-image")).toContainText("图片未能加载");
     await page.getByRole("button", { name: "导出", exact: true }).click();
     await page.getByRole("button", { name: "PDF 文件" }).click();
-    await expect(page.locator(".toast")).toContainText("请修复图片后再导出 PDF");
+    await expect(page.locator(".toast")).toContainText(
+      "请修复图片后再导出 PDF",
+    );
     await expect(page.locator('.article a[href^="javascript:"]')).toHaveCount(
       0,
     );

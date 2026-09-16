@@ -39,14 +39,24 @@ export function Editor({
             HighlightStyle.define([
               {
                 tag: tags.heading,
-                color: "#1d5685",
+                color: "var(--editor-heading, #1d5685)",
                 fontWeight: "700",
                 textDecoration: "none",
               },
-              { tag: tags.link, color: "#3c7561", textDecoration: "none" },
-              { tag: tags.url, color: "#9e4966" },
-              { tag: tags.quote, color: "#688473" },
-              { tag: tags.monospace, color: "#785aa0" },
+              {
+                tag: tags.link,
+                color: "var(--editor-link, #3c7561)",
+                textDecoration: "none",
+              },
+              { tag: tags.url, color: "var(--editor-url, #9e4966)" },
+              { tag: tags.quote, color: "var(--editor-quote, #688473)" },
+              { tag: tags.keyword, color: "var(--editor-code, #785aa0)" },
+              {
+                tag: [tags.string, tags.number, tags.bool],
+                color: "var(--editor-link, #3c7561)",
+              },
+              { tag: tags.comment, color: "var(--editor-quote, #688473)" },
+              { tag: tags.monospace, color: "var(--editor-code, #785aa0)" },
             ]),
           ),
           EditorView.lineWrapping,
@@ -96,7 +106,7 @@ export function Editor({
             "&": {
               height: "100%",
               fontSize: "14px",
-              backgroundColor: "#fafbfc",
+              backgroundColor: "var(--editor-bg, #fafbfc)",
             },
             ".cm-scroller": {
               overflow: "auto",
@@ -106,15 +116,19 @@ export function Editor({
             ".cm-content": { padding: "22px 0" },
             ".cm-line": { padding: "0 22px 0 12px" },
             ".cm-gutters": {
-              backgroundColor: "#f6f8fa",
-              color: "#a0a9b4",
+              backgroundColor: "var(--editor-gutter, #f6f8fa)",
+              color: "var(--editor-muted, #a0a9b4)",
               borderRight: "1px solid #edf0f2",
               minWidth: "46px",
             },
-            ".cm-activeLine": { backgroundColor: "#edf3ef77" },
+            ".cm-activeLine": {
+              backgroundColor: "var(--editor-active, #edf3ef77)",
+            },
             ".cm-activeLineGutter": { backgroundColor: "transparent" },
             "&.cm-focused": { outline: "none" },
-            ".cm-selectionBackground": { backgroundColor: "#dcebdd!important" },
+            ".cm-selectionBackground": {
+              backgroundColor: "var(--editor-selection, #dcebdd)!important",
+            },
           }),
         ],
       }),

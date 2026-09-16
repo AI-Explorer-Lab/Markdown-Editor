@@ -15,8 +15,9 @@ import {
   Download,
   FolderOpen,
   Save,
-  PanelRightClose,
-  PanelRightOpen,
+  Palette,
+  Moon,
+  Sun,
   Plus,
   X,
   FileText,
@@ -31,29 +32,72 @@ import {
 import { undo, redo } from "@codemirror/commands";
 import { Editor } from "./Editor";
 import { Preview } from "./Preview";
-import { themes, ThemeId } from "./themes";
+import { themes, ThemeId, isThemeId } from "./themes";
+import { NewThemePicker } from "./NewThemePicker";
+import { ThemeDesigner } from "./ThemeDesigner";
+import {
+  validateAppearance,
+  readLibrary,
+  type SavedTheme,
+  type Appearance,
+  type CustomTheme,
+} from "./customThemes";
 import { sample } from "./sample";
 import { download, prepareArticle, htmlDocument, bundle } from "./export";
-type Paper = { name: string; content: string; revision: string };
+type Paper = {
+  name: string;
+  content: string;
+  revision: string;
+  appearance?: Appearance | null;
+};
 type Draft = {
   source: string;
   name: string;
   revision: string | null;
   saved: string;
   theme: ThemeId;
+  custom: CustomTheme | null;
+  savedAppearance: string;
   fontSize: number;
   lineHeight: number;
 };
+const appearanceOf = (d: Appearance): Appearance => ({
+  theme: d.theme,
+  custom: d.custom,
+  fontSize: d.fontSize,
+  lineHeight: d.lineHeight,
+});
+const appearanceKey = (d: Appearance) => JSON.stringify(appearanceOf(d));
+const hasChanges = (d: Draft) =>
+  d.source !== d.saved || (!!d.name && appearanceKey(d) !== d.savedAppearance);
 const initial = (): Draft => {
   try {
     const d = JSON.parse(
       localStorage.getItem("markdown-studio-draft") || "null",
     );
-    if (d && typeof d.source === "string")
+    if (d && typeof d.source === "string") {
+      let appearance: Appearance = {
+        theme: "forest",
+        custom: null,
+        fontSize: 16,
+        lineHeight: 1.8,
+      };
+      try {
+        appearance = validateAppearance({
+          theme: isThemeId(d.theme) ? d.theme : "forest",
+          custom: d.custom || null,
+          fontSize: d.fontSize,
+          lineHeight: d.lineHeight,
+        });
+      } catch {
+        /* Keep the user's text even when a stored style is invalid. */
+      }
       return {
         ...d,
-        theme: themes.some((t) => t.id === d.theme) ? d.theme : "forest",
+        ...appearance,
+        savedAppearance: d.savedAppearance || appearanceKey(appearance),
       };
+    }
   } catch {}
   return {
     source: sample,
@@ -61,6 +105,8 @@ const initial = (): Draft => {
     revision: null,
     saved: "",
     theme: "forest",
+    custom: null,
+    savedAppearance: "",
     fontSize: 16,
     lineHeight: 1.8,
   };
@@ -73,12 +119,67 @@ async function api<T>(url: string, options?: RequestInit): Promise<T> {
 }
 export default function App() {
   const [doc, setDoc] = useState(initial);
-  const [mobileThemes, setMobileThemes] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem("markdown-studio-color-mode");
+      if (saved) return saved === "dark";
+    } catch {}
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "markdown-studio-color-mode",
+        darkMode ? "dark" : "light",
+      );
+    } catch {}
+  }, [darkMode]);
+  const [themesOpen, setThemesOpen] = useState(false);
+  const [themeCandidate, setThemeCandidate] = useState<Appearance | null>(null);
+  useEffect(() => {
+    if (!themesOpen) setThemeCandidate(null);
+  }, [themesOpen]);
+  const [themeEditing, setThemeEditing] = useState(false);
+  const themeButton = useRef<HTMLButtonElement | null>(null);
+  const themePanel = useRef<HTMLElement | null>(null);
   const [view, setView] = useState("split");
-  const [sidebar, setSidebar] = useState(true);
   const [menu, setMenu] = useState(false);
-  const [dialog, setDialog] = useState<"save" | "open" | "image" | null>(null);
+  useEffect(() => {
+    if (!themesOpen) return;
+    const outside = (event: PointerEvent) => {
+      if (
+        !themePanel.current?.contains(event.target as Node) &&
+        !themeButton.current?.contains(event.target as Node) &&
+        !(themeEditing && (event.target as Element).closest(".preview-pane"))
+      )
+        setThemesOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !document.querySelector(".theme-preview-modal")
+      ) {
+        setThemesOpen(false);
+        themeButton.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [themesOpen, themeEditing]);
+  const [dialog, setDialog] = useState<
+    "save" | "open" | "image" | "new" | null
+  >(null);
   const [saveName, setSaveName] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newTheme, setNewTheme] = useState("forest");
+  const [newError, setNewError] = useState("");
+  const [newLibrary, setNewLibrary] = useState<SavedTheme[]>([]);
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
   const [files, setFiles] = useState<{ name: string; updated: number }[]>([]);
@@ -94,9 +195,26 @@ export default function App() {
   const live = useRef(doc);
   live.current = doc;
   const saving = useRef(false);
-  const dirty = doc.source !== doc.saved;
+  const dirty = hasChanges(doc);
   const workspace = useRef<HTMLDivElement>(null);
   const previewPane = useRef<HTMLDivElement>(null);
+  async function refreshHistory() {
+    try {
+      setFiles(await api("/api/papers"));
+      setHistoryError("");
+    } catch (e) {
+      setHistoryError((e as Error).message);
+    }
+  }
+  useEffect(() => {
+    if (!historyOpen) return;
+    void refreshHistory();
+    const refresh = () => {
+      void refreshHistory();
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [historyOpen]);
   function notify(message: string) {
     setToast(message);
   }
@@ -117,7 +235,7 @@ export default function App() {
   }, [doc]);
   useEffect(() => {
     const close = (e: BeforeUnloadEvent) => {
-      if (live.current.source !== live.current.saved) {
+      if (hasChanges(live.current)) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -249,6 +367,7 @@ export default function App() {
         body: JSON.stringify({
           name,
           content: snapshot.source,
+          appearance: appearanceOf(snapshot),
           baseRevision: name === snapshot.name ? snapshot.revision : null,
         }),
       });
@@ -257,6 +376,7 @@ export default function App() {
         name: r.name,
         revision: r.revision,
         saved: snapshot.source,
+        savedAppearance: appearanceKey(snapshot),
       };
       live.current = next;
       setDoc(next);
@@ -265,6 +385,7 @@ export default function App() {
       } catch {}
       setDialog(null);
       notify("已保存到 paper/" + r.name);
+      void refreshHistory();
     } catch (e) {
       notify((e as Error).message);
     } finally {
@@ -277,41 +398,125 @@ export default function App() {
       !dirty || window.confirm("当前内容尚未保存到文件，仍要离开这篇文章吗？")
     );
   }
-  async function openPicker() {
-    if (busy) return;
-    try {
-      setFiles(await api("/api/papers"));
-      setDialog("open");
-    } catch (e) {
-      notify((e as Error).message);
-    }
-  }
   async function openPaper(name: string) {
-    if (!safeSwitch()) return;
+    if (busy || !safeSwitch()) return;
+    setBusy("打开文章");
     try {
       const paper = await api<Paper>("/api/papers/" + encodeURIComponent(name));
-      let t = doc.theme;
-      try {
-        const stored = localStorage.getItem("theme:" + name);
-        if (themes.some((x) => x.id === stored)) t = stored as ThemeId;
-      } catch {}
+      let appearance: Appearance = {
+        theme: "forest",
+        custom: null,
+        fontSize: 16,
+        lineHeight: 1.8,
+      };
+      if (paper.appearance) {
+        try {
+          appearance = validateAppearance(paper.appearance);
+        } catch {
+          notify("文章样式配置无效，已使用基础排版。原文件未修改。");
+        }
+      }
       setDoc((d) => ({
         ...d,
+        ...appearance,
+        savedAppearance: appearanceKey(appearance),
         source: paper.content,
         saved: paper.content,
         name: paper.name,
         revision: paper.revision,
-        theme: t,
       }));
       setDialog(null);
+      if (window.innerWidth <= 850) setHistoryOpen(false);
     } catch (e) {
       notify((e as Error).message);
+    } finally {
+      setBusy("");
     }
   }
   function newPaper() {
-    if (busy || !safeSwitch()) return;
-    setDoc((d) => ({ ...d, source: "", saved: "", name: "", revision: null }));
-    editor.current?.focus();
+    if (busy) return;
+    setNewTitle("");
+    setNewError("");
+    setNewTheme(doc.custom ? "current" : doc.theme);
+    try {
+      setNewLibrary(readLibrary());
+    } catch {
+      setNewLibrary([]);
+    }
+    setThemesOpen(false);
+    setDialog("new");
+  }
+  async function createPaper() {
+    if (saving.current || busy) return;
+    if (!newTitle.trim()) {
+      setNewError("请输入文章标题");
+      return;
+    }
+    if (!safeSwitch()) return;
+    let appearance: Appearance;
+    const savedTheme = newLibrary.find((t) => "saved:" + t.id === newTheme);
+    if (savedTheme)
+      appearance = {
+        theme: savedTheme.config.base,
+        custom: structuredClone(savedTheme.config),
+        fontSize: savedTheme.fontSize,
+        lineHeight: savedTheme.lineHeight,
+      };
+    else if (newTheme === "current")
+      appearance = structuredClone(appearanceOf(doc));
+    else if (newTheme === "blank")
+      appearance = {
+        theme: "blank",
+        custom: { version: 1, base: "blank", name: "我的自定义", values: {} },
+        fontSize: 16,
+        lineHeight: 1.8,
+      };
+    else
+      appearance = {
+        theme: newTheme as ThemeId,
+        custom: null,
+        fontSize: 16,
+        lineHeight: 1.8,
+      };
+    saving.current = true;
+    setBusy("创建文章");
+    setNewError("");
+    try {
+      appearance = validateAppearance(appearance);
+      const result = await api<{ name: string; revision: string }>(
+        "/api/papers",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newTitle,
+            content: "",
+            appearance,
+            baseRevision: null,
+          }),
+        },
+      );
+      const next: Draft = {
+        ...appearance,
+        source: "",
+        saved: "",
+        name: result.name,
+        revision: result.revision,
+        savedAppearance: appearanceKey(appearance),
+      };
+      live.current = next;
+      setDoc(next);
+      setDialog(null);
+      setHistoryOpen(true);
+      void refreshHistory();
+      notify("已创建 paper/" + result.name);
+      editor.current?.focus();
+    } catch (e) {
+      setNewError((e as Error).message);
+    } finally {
+      saving.current = false;
+      setBusy("");
+    }
   }
   async function importFile(file: File) {
     if (busy || !safeSwitch()) return;
@@ -363,11 +568,7 @@ export default function App() {
     }
   }
   function selectTheme(theme: ThemeId) {
-    setDoc((d) => ({ ...d, theme }));
-    if (doc.name)
-      try {
-        localStorage.setItem("theme:" + doc.name, theme);
-      } catch {}
+    setThemeCandidate({ ...appearanceOf(doc), theme, custom: null });
   }
   async function copy(platform: "wechat" | "zhihu") {
     if (!article.current || !ready || busy) return;
@@ -385,7 +586,7 @@ export default function App() {
       await navigator.clipboard.write([item]);
       const r = await result;
       notify(
-        `已复制${platform === "wechat" ? "公众号" : "知乎"}格式。${r.imageCount ? "含图片，请在目标平台粘贴并确认图片已上传。" : "请粘贴到目标平台。"}${r.warnings.length ? "部分外链图片无法内嵌，需手动补传。" : ""}`,
+        `已复制${platform === "wechat" ? "公众号" : "知乎"}格式。${r.imageCount ? "含图片，请在目标平台粘贴并确认图片已上传。" : "请粘贴到目标平台。"}${r.warnings.length ? "部分外链图片无法内嵌，需手动补传。" : ""}${r.adjustments.join("")}`,
       );
     } catch (e) {
       notify("复制失败：" + (e as Error).message);
@@ -442,7 +643,7 @@ export default function App() {
   function dragSplit(e: React.PointerEvent) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const rect = workspace.current!.getBoundingClientRect();
-    const available = rect.width - (sidebar ? 284 : 0);
+    const available = rect.width - 5;
     const move = (event: PointerEvent) =>
       setSplit(
         Math.max(
@@ -458,7 +659,12 @@ export default function App() {
     window.addEventListener("pointerup", up);
   }
   return (
-    <div className="app-shell">
+    <div
+      className={
+        "app-shell" + (themesOpen && themeEditing ? " customizing" : "")
+      }
+      data-color-mode={darkMode ? "dark" : "light"}
+    >
       <header className="app-header">
         <div className="brand">
           <span className="brand-mark">M</span>
@@ -475,6 +681,16 @@ export default function App() {
         </div>
         <div className="header-actions">
           <button
+            className="history-trigger"
+            aria-label="文章历史"
+            title="文章历史"
+            aria-expanded={historyOpen}
+            aria-controls="article-history"
+            onClick={() => setHistoryOpen(!historyOpen)}
+          >
+            <FileText size={17} />
+          </button>
+          <button
             title="新建文章"
             aria-label="新建文章"
             onClick={newPaper}
@@ -482,11 +698,35 @@ export default function App() {
           >
             <Plus size={17} />
           </button>
-          <button onClick={openPicker} disabled={!!busy}>
-            <FolderOpen size={16} />
-            <span>打开</span>
+          <button
+            ref={themeButton}
+            className="theme-trigger"
+            aria-label="主题"
+            aria-expanded={themesOpen}
+            aria-controls="theme-popover"
+            onClick={() => {
+              setThemesOpen(!themesOpen);
+              setMenu(false);
+            }}
+          >
+            <Palette size={16} />
+            <span>主题</span>
+            <ChevronDown size={13} />
           </button>
-          <button onClick={requestSave} disabled={!!busy}>
+          <button
+            className="color-mode-toggle"
+            aria-label={darkMode ? "切换到浅色模式" : "切换到黑暗模式"}
+            title={darkMode ? "切换到浅色模式" : "切换到黑暗模式"}
+            onClick={() => setDarkMode(!darkMode)}
+          >
+            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button
+            aria-label="保存"
+            title="保存"
+            onClick={requestSave}
+            disabled={!!busy}
+          >
             <Save size={16} />
             <span>保存</span>
             <kbd>⌘S</kbd>
@@ -498,7 +738,11 @@ export default function App() {
           >
             复制到公众号
           </button>
-          <button onClick={() => copy("zhihu")} disabled={!!busy || !ready}>
+          <button
+            className="secondary-copy"
+            onClick={() => copy("zhihu")}
+            disabled={!!busy || !ready}
+          >
             复制到知乎
           </button>
           <div className="export-wrap">
@@ -507,13 +751,24 @@ export default function App() {
               onClick={() => setMenu(!menu)}
               disabled={!!busy}
             >
-              导出
+              <span className="desktop-export-label">导出</span>
+              <span className="compact-more-label">更多</span>
               <ChevronDown size={14} />
             </button>
             {menu && (
               <>
                 <div className="menu-backdrop" onClick={() => setMenu(false)} />
                 <div className="dropdown">
+                  <button
+                    className="compact-copy"
+                    onClick={() => {
+                      setMenu(false);
+                      void copy("zhihu");
+                    }}
+                    disabled={!!busy || !ready}
+                  >
+                    复制到知乎
+                  </button>
                   {(["md", "html", "pdf", "zip"] as const).map((f) => (
                     <button key={f} onClick={() => exportFile(f)}>
                       <Download size={15} />
@@ -640,178 +895,231 @@ export default function App() {
               </button>
             ))}
           </div>
-          <button
-            className={"sidebar-toggle " + (!sidebar ? "selected" : "")}
-            title="切换主题面板"
-            aria-label="切换主题面板"
-            onClick={() => {
-              if (window.innerWidth <= 850) {
-                setSidebar(true);
-                setMobileThemes(!mobileThemes);
-              } else setSidebar(!sidebar);
-            }}
-          >
-            {sidebar ? (
-              <PanelRightClose size={18} />
-            ) : (
-              <PanelRightOpen size={18} />
-            )}
-          </button>
         </div>
       </div>
-      <main
-        ref={workspace}
-        className={`workspace view-${view} ${sidebar ? "" : "no-sidebar"}`}
-        style={{ "--split": split } as React.CSSProperties}
-      >
-        <section className="editing-pane" aria-label="源码编辑区">
-          <Editor
-            value={doc.source}
-            onChange={setSource}
-            viewRef={editor}
-            onFiles={uploadImages}
-            onSave={requestSave}
-          />
-        </section>
-        <div
-          className="resize-handle"
-          role="separator"
-          aria-label="调整编辑区宽度"
-          aria-orientation="vertical"
-          aria-valuenow={Math.round(split)}
-          tabIndex={0}
-          onPointerDown={dragSplit}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowLeft") setSplit((s) => Math.max(25, s - 2));
-            if (e.key === "ArrowRight") setSplit((s) => Math.min(75, s + 2));
-          }}
-        />
-        <section
-          className="preview-pane"
-          ref={previewPane}
-          aria-label="文章预览"
-        >
-          <Preview
-            source={doc.source}
-            theme={doc.theme}
-            fontSize={doc.fontSize}
-            lineHeight={doc.lineHeight}
-            articleRef={article}
-            onRendered={setReady}
-          />
-          {!doc.source && (
-            <div className="empty-preview">
-              <FileText size={34} />
-              <h2>从一句话开始</h2>
-              <p>在左侧写下文字，预览会在这里出现。</p>
-            </div>
-          )}
-        </section>
-        {sidebar && (
+      <div className="writing-layout">
+        {historyOpen && (
           <aside
-            className={"theme-panel " + (mobileThemes ? "mobile-open" : "")}
+            id="article-history"
+            className="article-history"
+            aria-label="文章历史"
           >
-            <div className="panel-title">
-              <h2>排版主题</h2>
-              <span>10 种风格</span>
+            <div className="history-heading">
+              <strong>文章历史</strong>
+              <button
+                aria-label="关闭文章历史"
+                onClick={() => setHistoryOpen(false)}
+              >
+                <X size={16} />
+              </button>
             </div>
-            <div className="theme-grid">
-              {themes.map((t) => (
+            <div className="history-tools">
+              <span>paper · {files.length} 篇</span>
+              <button onClick={() => void refreshHistory()} disabled={!!busy}>
+                刷新
+              </button>
+            </div>
+            <button
+              className="theme-secondary"
+              onClick={() => importRef.current?.click()}
+              disabled={!!busy}
+            >
+              <FolderOpen size={15} /> 导入本地 Markdown
+            </button>
+            {historyError && (
+              <p role="alert" className="history-error">
+                {historyError}
+              </p>
+            )}
+            <nav aria-label="已保存文章">
+              {files.map((file) => (
                 <button
-                  key={t.id}
-                  className={
-                    "theme-card " + (doc.theme === t.id ? "is-selected" : "")
-                  }
-                  aria-label={t.name + "主题"}
-                  aria-pressed={doc.theme === t.id}
-                  onClick={() => selectTheme(t.id)}
-                  title={t.description}
+                  key={file.name}
+                  title={file.name}
+                  className={doc.name === file.name ? "active" : ""}
+                  aria-current={doc.name === file.name ? "page" : undefined}
+                  disabled={!!busy}
+                  onClick={() => void openPaper(file.name)}
                 >
-                  <div
-                    className={"theme-thumb thumb-" + t.id}
-                    style={
-                      {
-                        "--accent": t.accent,
-                        "--soft": t.soft,
-                        "--paper": t.bg,
-                      } as React.CSSProperties
-                    }
-                  >
-                    <div className="mini-title">永远相信文字的力量</div>
-                    <div className="mini-rule" />
-                    <div className="mini-line" />
-                    <div className="mini-line short" />
-                    <div className="mini-quote">
-                      <span />
-                    </div>
-                    {doc.theme === t.id && (
+                  <FileText size={15} />
+                  <span>{file.name.replace(/\.md$/i, "")}</span>
+                </button>
+              ))}
+            </nav>
+            {!files.length && !historyError && (
+              <p className="theme-hint">
+                还没有文章。点击“新建文章”创建第一篇。
+              </p>
+            )}
+            <button
+              className="theme-secondary"
+              onClick={newPaper}
+              disabled={!!busy}
+            >
+              新建文章
+            </button>
+          </aside>
+        )}
+        <main
+          ref={workspace}
+          className={`workspace view-${view} no-sidebar`}
+          style={{ "--split": split } as React.CSSProperties}
+        >
+          <section className="editing-pane" aria-label="源码编辑区">
+            <Editor
+              value={doc.source}
+              onChange={setSource}
+              viewRef={editor}
+              onFiles={uploadImages}
+              onSave={requestSave}
+            />
+          </section>
+          <div
+            className="resize-handle"
+            role="separator"
+            aria-label="调整编辑区宽度"
+            aria-orientation="vertical"
+            aria-valuenow={Math.round(split)}
+            tabIndex={0}
+            onPointerDown={dragSplit}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft") setSplit((s) => Math.max(25, s - 2));
+              if (e.key === "ArrowRight") setSplit((s) => Math.min(75, s + 2));
+            }}
+          />
+          <section
+            className="preview-pane"
+            ref={previewPane}
+            aria-label="文章预览"
+          >
+            <Preview
+              source={doc.source}
+              theme={doc.theme}
+              custom={doc.custom}
+              fontSize={doc.fontSize}
+              lineHeight={doc.lineHeight}
+              articleRef={article}
+              onRendered={setReady}
+            />
+            {!doc.source && (
+              <div className="empty-preview">
+                <FileText size={34} />
+                <h2>从一句话开始</h2>
+                <p>在左侧写下文字，预览会在这里出现。</p>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+      <aside
+        ref={themePanel}
+        id="theme-popover"
+        className="theme-panel theme-popover"
+        hidden={!themesOpen}
+        aria-label="主题选择与自定义"
+      >
+        <div className="panel-title">
+          <h2>排版主题</h2>
+          <button
+            className="theme-close"
+            aria-label="关闭主题面板"
+            onClick={() => {
+              setThemesOpen(false);
+              themeButton.current?.focus();
+            }}
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <ThemeDesigner
+          key={doc.name}
+          onEditingChange={setThemeEditing}
+          candidate={themeCandidate}
+          onSelect={setThemeCandidate}
+          onApply={() => {
+            if (themeCandidate) setDoc((d) => ({ ...d, ...themeCandidate }));
+            setThemeCandidate(null);
+            notify("已应用这个风格");
+          }}
+          appearance={appearanceOf(doc)}
+          onChange={(a) => {
+            setThemeCandidate(null);
+            setDoc((d) => ({ ...d, ...a }));
+          }}
+          article={article}
+          notify={notify}
+        >
+          <div className="theme-grid">
+            {themes.map((t) => (
+              <button
+                key={t.id}
+                className={
+                  "theme-card " +
+                  ((themeCandidate || doc).theme === t.id &&
+                  !(themeCandidate || doc).custom
+                    ? "is-selected"
+                    : "")
+                }
+                aria-label={t.name + "主题"}
+                aria-pressed={
+                  (themeCandidate || doc).theme === t.id &&
+                  !(themeCandidate || doc).custom
+                }
+                onClick={() => selectTheme(t.id)}
+                aria-describedby={"theme-tip-" + t.id}
+              >
+                <div
+                  className={"theme-thumb thumb-" + t.id}
+                  style={
+                    {
+                      "--accent": t.accent,
+                      "--soft": t.soft,
+                      "--paper": t.bg,
+                    } as React.CSSProperties
+                  }
+                >
+                  <div className="mini-title">永远相信文字的力量</div>
+                  <div className="mini-rule" />
+                  <div className="mini-line" />
+                  <div className="mini-line short" />
+                  <div className="mini-quote">
+                    <span />
+                  </div>
+                  {(themeCandidate || doc).theme === t.id &&
+                    !(themeCandidate || doc).custom && (
                       <span className="theme-check">
                         <Check size={13} />
                       </span>
                     )}
-                  </div>
-                  <span className="theme-name">{t.name}</span>
-                </button>
-              ))}
-            </div>
-            <div className="theme-settings">
-              <label>
-                字号
-                <select
-                  value={doc.fontSize}
-                  onChange={(e) =>
-                    setDoc((d) => ({ ...d, fontSize: Number(e.target.value) }))
-                  }
+                </div>
+                <span className="theme-name">{t.name}</span>
+                <span
+                  className="theme-tooltip"
+                  role="tooltip"
+                  id={"theme-tip-" + t.id}
                 >
-                  {[14, 15, 16, 17, 18, 20].map((n) => (
-                    <option key={n}>{n}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                行距
-                <select
-                  value={doc.lineHeight}
-                  onChange={(e) =>
-                    setDoc((d) => ({
-                      ...d,
-                      lineHeight: Number(e.target.value),
-                    }))
-                  }
-                >
-                  {[1.5, 1.6, 1.8, 2, 2.2].map((n) => (
-                    <option key={n}>{n}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <p className="theme-note">主题仅影响正文排版</p>
-            <div className="theme-detail">
-              <i
-                style={{
-                  background: themes.find((t) => t.id === doc.theme)?.accent,
-                }}
-              />
-              {themes.find((t) => t.id === doc.theme)?.description}
-            </div>
-            <button
-              className="sample-link"
-              onClick={() => {
-                if (safeSwitch())
-                  setDoc((d) => ({
-                    ...d,
-                    source: sample,
-                    name: "",
-                    saved: "",
-                    revision: null,
-                  }));
-              }}
-            >
-              打开格式示例 <ArrowUpRight size={13} />
-            </button>
-          </aside>
-        )}
-      </main>
+                  {t.description}
+                </span>
+              </button>
+            ))}
+          </div>
+        </ThemeDesigner>
+        <button
+          className="sample-link"
+          onClick={() => {
+            if (safeSwitch())
+              setDoc((d) => ({
+                ...d,
+                source: sample,
+                name: "",
+                saved: "",
+                revision: null,
+              }));
+          }}
+        >
+          打开格式示例 <ArrowUpRight size={13} />
+        </button>
+      </aside>
       <footer className="statusbar">
         <span>
           Markdown <i /> UTF-8
@@ -877,15 +1185,17 @@ export default function App() {
           }}
         >
           <section
-            className="modal"
+            className={"modal" + (dialog === "new" ? " new-article-modal" : "")}
             role="dialog"
             aria-modal="true"
             aria-label={
-              dialog === "save"
-                ? "保存文章"
-                : dialog === "open"
-                  ? "打开文章"
-                  : "插入图片"
+              dialog === "new"
+                ? "新建文章"
+                : dialog === "save"
+                  ? "保存文章"
+                  : dialog === "open"
+                    ? "打开文章"
+                    : "插入图片"
             }
             onKeyDown={(e) => {
               if (e.key === "Escape" && !busy) setDialog(null);
@@ -893,11 +1203,13 @@ export default function App() {
           >
             <div className="modal-title">
               <h2>
-                {dialog === "save"
-                  ? "给文章起个名字"
-                  : dialog === "open"
-                    ? "打开文章"
-                    : "插入图片"}
+                {dialog === "new"
+                  ? "新建文章"
+                  : dialog === "save"
+                    ? "给文章起个名字"
+                    : dialog === "open"
+                      ? "打开文章"
+                      : "插入图片"}
               </h2>
               <button
                 aria-label="关闭对话框"
@@ -907,6 +1219,58 @@ export default function App() {
                 <X size={19} />
               </button>
             </div>
+            {dialog === "new" && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void createPaper();
+                }}
+              >
+                <label className="field-label">
+                  文章标题
+                  <input
+                    autoFocus
+                    required
+                    maxLength={100}
+                    aria-label="文章标题"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="请输入文章标题"
+                    disabled={!!busy}
+                  />
+                </label>
+                <p className="path-hint">
+                  paper/{newTitle.trim().replace(/\.md$/i, "") || "文章标题"}.md
+                </p>
+                <NewThemePicker
+                  value={newTheme}
+                  onChange={setNewTheme}
+                  current={appearanceOf(doc)}
+                  library={newLibrary}
+                  disabled={!!busy}
+                />
+                <p className="theme-hint">
+                  确认后立即创建本地文件并保存主题。同名文章不会被覆盖。
+                </p>
+                {newError && (
+                  <p className="history-error" role="alert">
+                    {newError}
+                  </p>
+                )}
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() => setDialog(null)}
+                  >
+                    取消
+                  </button>
+                  <button className="primary" disabled={!!busy} type="submit">
+                    创建文章
+                  </button>
+                </div>
+              </form>
+            )}
             {dialog === "save" && (
               <form
                 onSubmit={(e) => {

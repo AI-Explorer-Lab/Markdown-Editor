@@ -80,4 +80,15 @@ export const themes = [
     bg: "#1e2a30",
   },
 ] as const;
-export type ThemeId = (typeof themes)[number]["id"];
+export type ThemeId = (typeof themes)[number]["id"] | "blank";
+const neutralTheme = {
+  id: "blank",
+  name: "自定义",
+  accent: "#333333",
+  soft: "#f5f5f5",
+  bg: "#ffffff",
+} as const;
+export const isThemeId = (id: unknown): id is ThemeId =>
+  id === "blank" || themes.some((t) => t.id === id);
+export const themePreset = (id: ThemeId) =>
+  themes.find((t) => t.id === id) || neutralTheme;

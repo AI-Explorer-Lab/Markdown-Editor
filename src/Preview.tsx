@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useId } from "react";
 import { renderMarkdown } from "./markdown";
-import { themes, ThemeId } from "./themes";
+import { themePreset, ThemeId } from "./themes";
+import { customCSS, type CustomTheme } from "./customThemes";
 import DOMPurify from "dompurify";
 let serial = Promise.resolve();
 let counter = 0;
 export function Preview({
   source,
+  custom = null,
   theme,
   fontSize,
   lineHeight,
@@ -13,6 +15,7 @@ export function Preview({
   onRendered,
 }: {
   source: string;
+  custom?: CustomTheme | null;
   theme: ThemeId;
   fontSize: number;
   lineHeight: number;
@@ -20,7 +23,8 @@ export function Preview({
   onRendered: (value: boolean) => void;
 }) {
   const generation = useRef(0);
-  const t = themes.find((t) => t.id === theme)!;
+  const scope = "theme-" + useId().replace(/[^a-zA-Z0-9]/g, "");
+  const t = themePreset(theme);
   useEffect(() => {
     const node = articleRef.current;
     if (!node) return;
@@ -90,19 +94,23 @@ export function Preview({
     };
   }, [source]);
   return (
-    <article
-      ref={articleRef}
-      className="article"
-      data-theme={theme}
-      style={
-        {
-          "--accent": t.accent,
-          "--soft": t.soft,
-          "--paper": t.bg,
-          fontSize,
-          lineHeight,
-        } as React.CSSProperties
-      }
-    />
+    <>
+      <style>{customCSS(custom, `[data-style-scope="${scope}"]`)}</style>
+      <article
+        data-style-scope={scope}
+        ref={articleRef}
+        className="article"
+        data-theme={theme}
+        style={
+          {
+            "--accent": t.accent,
+            "--soft": t.soft,
+            "--paper": t.bg,
+            fontSize,
+            lineHeight,
+          } as React.CSSProperties
+        }
+      />
+    </>
   );
 }
