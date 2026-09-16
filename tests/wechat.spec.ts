@@ -1,3 +1,4 @@
+import { openThemes } from "./theme-panel";
 import fs from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 
@@ -19,6 +20,7 @@ test("all themes copy to WeChat without gradients, nonstandard alignment or cram
   await expect(page.locator(".article")).toHaveAttribute("data-ready", "true");
   const source =
     "# 标题\n\n## 标题装饰\n\n段落 **加粗** 和 *斜体*。\n\n> 第一行引用\n>\n> 第二行引用\n\n- [x] 任务\n- 普通列表\n\n| 左 | 中 | 右 |\n| :-- | :-: | --: |\n| 一 | 二 | 三 |\n\n```js\nconst answer = 42;\nconsole.log(answer);\n```\n\n脚注[^1]\n\n[^1]: 脚注内容";
+  await openThemes(page);
   await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
   await expect(page.locator(".article h1")).toHaveText("标题");
   const findings: Record<string, unknown> = {};
@@ -34,8 +36,12 @@ test("all themes copy to WeChat without gradients, nonstandard alignment or cram
     "报刊",
     "夜航",
   ]) {
+    await openThemes(page);
     await page
       .getByRole("button", { name: theme + "主题", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "应用这个风格", exact: true })
       .click();
     await page
       .getByRole("button", { name: "复制到公众号", exact: true })
@@ -64,7 +70,12 @@ test("all themes copy to WeChat without gradients, nonstandard alignment or cram
           )
           .map((e) => e.tagName + ":" + e.style.textAlign),
         lineHeight: elements
-          .filter((e) => e.tagName !== "IMG" && (!/^\d+(?:\.\d+)?$/.test(e.style.lineHeight) || Number(e.style.lineHeight) < 1.6))
+          .filter(
+            (e) =>
+              e.tagName !== "IMG" &&
+              (!/^\d+(?:\.\d+)?$/.test(e.style.lineHeight) ||
+                Number(e.style.lineHeight) < 1.6),
+          )
           .map((e) => e.tagName + ":" + e.style.lineHeight),
         text: doc.body.textContent,
         columns: elements
@@ -90,10 +101,12 @@ test("WeChat sets scalable line heights and logical alignment while HTML keeps o
   page,
 }) => {
   await page.goto("/");
+  await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill("# 标题\n\n## 琥珀装饰\n\n段落第一行\n\n右对齐段落\n\n结束");
   await page.getByRole("button", { name: "琥珀主题", exact: true }).click();
+  await page.getByRole("button", { name: "应用这个风格", exact: true }).click();
   await expect(page.locator(".article")).toHaveAttribute("data-ready", "true");
   const result = await page.evaluate(async () => {
     // Browser-side integration test against the real adapter, including hostile inherited styles.
@@ -168,8 +181,10 @@ test("reported amber article preserves readable nested mobile text", async ({
     });
   });
   await page.goto("/");
+  await openThemes(page);
   await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
   await page.getByRole("button", { name: "琥珀主题", exact: true }).click();
+  await page.getByRole("button", { name: "应用这个风格", exact: true }).click();
   await expect(page.locator(".article .diagram svg")).toContainText("分享文章");
   await page.getByRole("button", { name: "复制到公众号", exact: true }).click();
   await expect
@@ -188,7 +203,9 @@ test("reported amber article preserves readable nested mobile text", async ({
   expect(await page.locator("article img").count()).toBe(3);
   await expect(page.locator("pre")).toContainText("def greet(name: str)");
   await expect(page.locator("table strong")).toHaveText("加粗");
-  await expect(page.locator(".footnotes")).toContainText("文章保存到本项目的 paper 文件夹");
+  await expect(page.locator(".footnotes")).toContainText(
+    "文章保存到本项目的 paper 文件夹",
+  );
   for (const width of [375, 320]) {
     await page.setViewportSize({ width, height: 812 });
     const violations = await page
@@ -216,7 +233,9 @@ test("reported amber article preserves readable nested mobile text", async ({
 
 // Text fragments sharing a row must not be counted as separate lines.
 // This regression intentionally includes a genuinely overlapping control.
-test("mixed inline fragments are not extra lines; real overlapping rows fail", async ({ page }) => {
+test("mixed inline fragments are not extra lines; real overlapping rows fail", async ({
+  page,
+}) => {
   for (const width of [375, 677]) {
     await page.setContent(`<main style="width:${width}px;font:16px/1.6 sans-serif">
       <p id="mixed"><span leaf>试试切换右侧的 </span><strong><span leaf>10 种排版主题</span></strong><span leaf>。同样的文字，也可以有不同的气质。</span></p>
@@ -224,30 +243,42 @@ test("mixed inline fragments are not extra lines; real overlapping rows fail", a
       <p id="single" style="line-height:.5">只有一行</p>
       <p id="image" style="line-height:0"><img width="20" height="20" alt=""></p>
     </main>`);
-    const results = await page.locator("p").evaluateAll(nodes => nodes.map(node => {
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const rawRects = [...range.getClientRects()].filter(r => r.height > 0);
-      const font = parseFloat(getComputedStyle(node).fontSize);
-      const legacyFlag = rawRects.length >= 2 && range.getBoundingClientRect().height / rawRects.length < font * .95;
-      // Walk text nodes to avoid counting both an inline element and its text.
-      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-      const tops: number[] = [];
-      while (walker.nextNode()) {
-        if (!walker.currentNode.textContent?.trim()) continue;
-        range.selectNodeContents(walker.currentNode);
-        for (const rect of range.getClientRects()) {
-          if (rect.height > 0 && !tops.some(top => Math.abs(top - rect.top) < 2)) tops.push(rect.top);
+    const results = await page.locator("p").evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rawRects = [...range.getClientRects()].filter(
+          (r) => r.height > 0,
+        );
+        const font = parseFloat(getComputedStyle(node).fontSize);
+        const legacyFlag =
+          rawRects.length >= 2 &&
+          range.getBoundingClientRect().height / rawRects.length < font * 0.95;
+        // Walk text nodes to avoid counting both an inline element and its text.
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        const tops: number[] = [];
+        while (walker.nextNode()) {
+          if (!walker.currentNode.textContent?.trim()) continue;
+          range.selectNodeContents(walker.currentNode);
+          for (const rect of range.getClientRects()) {
+            if (
+              rect.height > 0 &&
+              !tops.some((top) => Math.abs(top - rect.top) < 2)
+            )
+              tops.push(rect.top);
+          }
         }
-      }
-      tops.sort((a, b) => a - b);
-      const overlap = tops.some((top, i) => i > 0 && top - tops[i - 1] < font * .95);
-      return { id: node.id, legacyFlag, overlap, rows: tops.length };
-    }));
-    expect(results.find(r => r.id === "mixed")!.legacyFlag).toBe(true);
-    expect(results.find(r => r.id === "mixed")!.overlap).toBe(false);
-    expect(results.find(r => r.id === "broken")!.overlap).toBe(true);
-    expect(results.find(r => r.id === "single")!.overlap).toBe(false);
-    expect(results.find(r => r.id === "image")!.overlap).toBe(false);
+        tops.sort((a, b) => a - b);
+        const overlap = tops.some(
+          (top, i) => i > 0 && top - tops[i - 1] < font * 0.95,
+        );
+        return { id: node.id, legacyFlag, overlap, rows: tops.length };
+      }),
+    );
+    expect(results.find((r) => r.id === "mixed")!.legacyFlag).toBe(true);
+    expect(results.find((r) => r.id === "mixed")!.overlap).toBe(false);
+    expect(results.find((r) => r.id === "broken")!.overlap).toBe(true);
+    expect(results.find((r) => r.id === "single")!.overlap).toBe(false);
+    expect(results.find((r) => r.id === "image")!.overlap).toBe(false);
   }
 });

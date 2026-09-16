@@ -1,3 +1,4 @@
+import { openThemes } from "./theme-panel";
 import fs from "node:fs/promises";
 import { test, expect, type Browser } from "@playwright/test";
 
@@ -102,6 +103,7 @@ test("actual clipboard article passes the unmodified official checker across all
     });
   });
   await page.goto("/");
+  await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill(await fs.readFile("tests/fixtures/wechat-amber-report.md", "utf8"));
@@ -119,8 +121,12 @@ test("actual clipboard article passes the unmodified official checker across all
     "报刊",
     "夜航",
   ]) {
+    await openThemes(page);
     await page
       .getByRole("button", { name: theme + "主题", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "应用这个风格", exact: true })
       .click();
     await page.evaluate(() => {
       (window as any).__wechat = "";
@@ -180,10 +186,8 @@ test("actual clipboard article passes the unmodified official checker across all
         .attach("amber-wechat-html", { body: html, contentType: "text/html" });
     }
   }
-  await test
-    .info()
-    .attach("official-checker-results", {
-      body: JSON.stringify(findings, null, 2),
-      contentType: "application/json",
-    });
+  await test.info().attach("official-checker-results", {
+    body: JSON.stringify(findings, null, 2),
+    contentType: "application/json",
+  });
 });
