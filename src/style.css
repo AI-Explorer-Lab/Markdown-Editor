@@ -1491,8 +1491,9 @@ kbd {
   --editor-url: #e4abc1;
   --editor-quote: #a1b8a9;
   --editor-code: #c8ace8;
-  --editor-active: #24382c;
-  --editor-selection: #365345;
+  /* CodeMirror draws selection below the lines: keep the active line translucent. */
+  --editor-active: #6ca67c26;
+  --editor-selection: #345875;
 }
 .app-shell[data-color-mode="dark"]
   :is(
