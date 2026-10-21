@@ -1,5 +1,40 @@
 import { test, expect } from "@playwright/test";
 
+test("dark editor keeps single-line and multiline selections visible, including after blur", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Markdown 源码" });
+  await editor.fill("第一行选中文字\n第二行选中文字");
+  await page.getByRole("button", { name: "切换到黑暗模式", exact: true }).click();
+  await editor.click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  const selection = page.locator(".cm-selectionBackground");
+  await expect(selection.first()).toBeVisible();
+  // A visible selection DOM node is insufficient: an opaque active line hides it.
+  const activeBackground = await page.locator(".cm-activeLine").evaluate(
+    (e) => getComputedStyle(e).backgroundColor,
+  );
+  expect(activeBackground).toMatch(/^rgba\(/);
+  const alpha = Number(activeBackground.slice(5, -1).split(",")[3]);
+  expect(alpha).toBeLessThan(0.3);
+  const selectionBackground = await selection.first().evaluate(
+    (e) => getComputedStyle(e).backgroundColor,
+  );
+  expect(selectionBackground).not.toBe(activeBackground);
+  expect(selectionBackground).not.toBe("rgba(0, 0, 0, 0)");
+  await page.keyboard.press("Shift+ArrowUp");
+  await expect.poll(() => selection.count()).toBeGreaterThan(1);
+  await page.getByRole("button", { name: "主题", exact: true }).focus();
+  await expect(page.locator(".cm-editor")).not.toHaveClass(/cm-focused/);
+  await expect(selection.first()).toBeVisible();
+  await expect(selection.first()).toHaveCSS("background-color", selectionBackground);
+  await page.getByRole("button", { name: "切换到浅色模式", exact: true }).click();
+  await expect(selection.first()).not.toHaveCSS("background-color", selectionBackground);
+});
+
 test("interface dark mode persists and leaves article and clipboard styling unchanged", async ({
   page,
   context,
