@@ -27,8 +27,15 @@ test("public homepage matches the concept at desktop and narrow widths", async (
     page.getByRole("button", { name: "开始写作", exact: true }),
   ).toBeVisible();
   for (const [width, height] of [
+    [2560, 1280],
+    [2048, 960],
+    [1920, 900],
     [1536, 1024],
+    [1536, 864],
     [1440, 900],
+    [1440, 760],
+    [1366, 650],
+    [1280, 600],
     [1024, 768],
     [768, 1024],
     [390, 844],
@@ -42,6 +49,13 @@ test("public homepage matches the concept at desktop and narrow widths", async (
     await expect(
       page.getByRole("button", { name: "开始写作", exact: true }),
     ).toBeInViewport();
+    if (width > 1000) {
+      expect(
+        await page.evaluate(() => document.documentElement.scrollHeight),
+      ).toBeLessThanOrEqual(height);
+      const footer = await page.locator(".home-footer").boundingBox();
+      expect(footer!.y + footer!.height).toBeLessThanOrEqual(height + 1);
+    }
     if (width === 1536 || width === 390)
       await page.screenshot({
         path: `.deploy/homepage-20261117/home-${width}.png`,

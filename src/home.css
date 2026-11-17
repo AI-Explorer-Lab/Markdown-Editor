@@ -444,6 +444,112 @@
     font-size: 16px;
   }
 }
+/* Keep the desktop landing page within the available browser height. */
+@media (min-width: 1001px) {
+  .home-header {
+    height: clamp(60px, 8svh, 88px);
+  }
+  .home-brand {
+    font-size: clamp(22px, 2.73svh, 28px);
+  }
+  .home-mark {
+    width: clamp(34px, 4.5svh, 46px);
+    height: clamp(34px, 4.3svh, 44px);
+    font-size: clamp(24px, 2.93svh, 30px);
+  }
+  .home-nav button {
+    font-size: clamp(16px, 1.95svh, 20px);
+  }
+  .home-hero {
+    padding-block: clamp(16px, 4svh, 48px);
+  }
+  .home-eyebrow {
+    font-size: clamp(18px, 2.5svh, 26px);
+    margin-bottom: clamp(12px, 2svh, 24px);
+  }
+  .home-intro h1 {
+    font-size: clamp(42px, min(5.08vw, 7.6svh), 78px);
+  }
+  .home-accent {
+    margin-top: clamp(14px, 2.4svh, 24px);
+  }
+  .home-description {
+    font-size: clamp(16px, min(1.7vw, 2.5svh), 26px);
+    margin: clamp(14px, 2.4svh, 24px) 0 clamp(20px, 3svh, 32px);
+  }
+  .home-actions button {
+    height: clamp(48px, 6.6svh, 68px);
+    font-size: clamp(18px, min(1.63vw, 2.44svh), 25px);
+  }
+  .home-actions svg {
+    width: clamp(22px, 2.73svh, 28px);
+    height: clamp(22px, 2.73svh, 28px);
+  }
+  .home-resume {
+    font-size: clamp(16px, 1.95svh, 20px) !important;
+    margin-top: clamp(12px, 2svh, 24px);
+  }
+  .home-demo-header,
+  .home-demo-toolbar {
+    height: clamp(36px, 4.7svh, 48px);
+  }
+  .home-demo-header {
+    font-size: clamp(14px, 1.76svh, 18px);
+  }
+  .home-demo-saved {
+    font-size: clamp(12px, 1.56svh, 16px);
+  }
+  .home-demo-source,
+  .home-demo-preview {
+    padding-top: 12px;
+    padding-bottom: clamp(14px, 2.5svh, 26px);
+  }
+  .home-demo-label {
+    font-size: clamp(12px, 1.66svh, 17px);
+    margin-bottom: clamp(10px, 1.6svh, 16px);
+  }
+  .home-demo-code,
+  .home-demo-article {
+    font-size: clamp(13px, min(1.43vw, 2.15svh), 22px);
+  }
+  .home-demo-code p {
+    margin-bottom: clamp(10px, 2svh, 22px);
+  }
+  .home-demo-code p:last-child {
+    margin-top: clamp(12px, 2svh, 24px);
+  }
+  .home-demo-article h2 {
+    font-size: clamp(20px, min(2.15vw, 3.22svh), 33px);
+    margin-bottom: clamp(10px, 1.56svh, 16px);
+  }
+  .home-demo-article p {
+    margin-bottom: clamp(12px, 1.95svh, 20px);
+  }
+  .home-demo-article h3 {
+    font-size: clamp(18px, min(1.85vw, 2.73svh), 28px);
+  }
+  .home-demo-article blockquote {
+    padding-block: clamp(8px, 1.27svh, 13px);
+  }
+  .home-features {
+    padding-bottom: clamp(24px, 4svh, 42px);
+  }
+  .home-feature > svg {
+    width: clamp(30px, 4.1svh, 42px);
+    height: clamp(30px, 4.1svh, 42px);
+  }
+  .home-feature h2 {
+    font-size: clamp(18px, min(1.7vw, 2.54svh), 26px);
+  }
+  .home-feature p {
+    font-size: clamp(15px, min(1.3vw, 1.95svh), 20px);
+    white-space: normal;
+  }
+  .home-footer {
+    padding-block: clamp(12px, 1.8svh, 20px);
+    font-size: clamp(14px, 1.76svh, 18px);
+  }
+}
 @media (max-width: 1000px) {
   .home-hero {
     grid-template-columns: 1fr;
