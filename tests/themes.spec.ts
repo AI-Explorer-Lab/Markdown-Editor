@@ -1,5 +1,5 @@
 import { openThemes } from "./theme-panel";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 import fs from "node:fs/promises";
 const source =
   "# 我的文章\n\n## 二级标题\n\n正文与 **重点**。\n\n> 引用内容\n\n- 条目\n\n| 名称 | 内容 |\n| --- | --- |\n| A | B |";
@@ -8,7 +8,7 @@ test("custom colors follow overrides, cancel restores, sample preserves source a
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.goto("/");
+  await page.goto("/#editor");
   await openThemes(page);
   await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
   await page.getByRole("button", { name: "素白主题", exact: true }).click();
@@ -85,7 +85,7 @@ test("theme library imports validate, snapshots survive a fresh browser and libr
 }) => {
   const name = "theme-e2e-" + Date.now();
   try {
-    await page.goto("/");
+    await page.goto("/#editor");
     await openThemes(page);
     await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
     await page.getByRole("button", { name: "基于此主题定制" }).click();
@@ -129,19 +129,31 @@ test("theme library imports validate, snapshots survive a fresh browser and libr
     await page
       .getByRole("button", { name: "更新所选主题", exact: true })
       .click();
-    await expect(page.locator(".save-status")).toHaveText("未保存");
-    // Editing a library theme affects the current unsaved appearance, not the saved article snapshot.
+    await expect(page.locator(".save-status")).toHaveText("已保存", {
+      timeout: 10000,
+    });
+    // Updating the current appearance is now automatically saved with this article.
     expect(
       JSON.parse(await fs.readFile(`paper/.styles/${name}.md.json`, "utf8"))
         .custom.values.accent,
-    ).toBe("#123abc");
+    ).toBe("#aa2200");
     await page
       .getByRole("button", { name: "删除 我的蓝色", exact: true })
       .first()
       .click();
     const fresh = await browser.newContext();
+    await fresh.request.post(
+      (process.env.TEST_BASE_URL || "http://127.0.0.1:5173") +
+        "/api/auth/login",
+      {
+        data: {
+          username: process.env.TEST_USERNAME || "test-writer",
+          password: process.env.TEST_PASSWORD || "browser-test-only-password",
+        },
+      },
+    );
     const other = await fresh.newPage();
-    await other.goto(process.env.TEST_BASE_URL || "http://127.0.0.1:5173");
+    await other.goto((process.env.TEST_BASE_URL || "http://127.0.0.1:5173") + "/#editor");
     other.on("dialog", (d) => d.accept());
     await other.getByRole("button", { name: "文章历史", exact: true }).click();
     await other.getByRole("button", { name: new RegExp(name) }).click();
@@ -150,7 +162,7 @@ test("theme library imports validate, snapshots survive a fresh browser and libr
     ).toBeVisible();
     await expect(other.locator(".article h2")).toHaveCSS(
       "color",
-      "rgb(18, 58, 188)",
+      "rgb(170, 34, 0)",
     );
     await fresh.close();
     const invalid = {
@@ -181,7 +193,7 @@ test("custom dark paper uses export conversion without false image warnings", as
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.goto("/");
+  await page.goto("/#editor");
   await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
@@ -217,7 +229,7 @@ test("custom dark paper uses export conversion without false image warnings", as
 test("independent custom theme survives reload and has no builtin description", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill("# 标题\n\n## 子标题\n\n> 引用");

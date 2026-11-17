@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api, authFetch } from "./api";
 import { EditorView } from "@codemirror/view";
 import {
   Bold,
@@ -43,6 +44,7 @@ import {
   type CustomTheme,
 } from "./customThemes";
 import { sample } from "./sample";
+import type { EditorEntry } from "./HomePage";
 import { download, prepareArticle, htmlDocument, bundle } from "./export";
 type Paper = {
   name: string;
@@ -103,21 +105,34 @@ const initial = (): Draft => {
     source: sample,
     name: "",
     revision: null,
-    saved: "",
+    saved: sample,
     theme: "forest",
     custom: null,
-    savedAppearance: "",
+    savedAppearance: appearanceKey({
+      theme: "forest",
+      custom: null,
+      fontSize: 16,
+      lineHeight: 1.8,
+    }),
     fontSize: 16,
     lineHeight: 1.8,
   };
 };
-async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const r = await fetch(url, options);
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || "操作失败");
-  return data;
-}
-export default function App() {
+export default function App({
+  authenticated,
+  active,
+  entry,
+  onHome,
+  onLogout,
+  onAccount,
+}: {
+  authenticated: boolean;
+  active: boolean;
+  entry: EditorEntry;
+  onHome: () => void;
+  onLogout: () => void;
+  onAccount: () => void;
+}) {
   const [doc, setDoc] = useState(initial);
   const [darkMode, setDarkMode] = useState(() => {
     try {
@@ -194,10 +209,42 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
   const live = useRef(doc);
   live.current = doc;
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const saving = useRef(false);
+  const [saveError, setSaveError] = useState("");
   const dirty = hasChanges(doc);
+  useEffect(() => {
+    if (!authenticated || !doc.name || !dirty || saveError || busy) return;
+    const timer = setTimeout(() => void save(live.current.name, true), 1800);
+    return () => clearTimeout(timer);
+  }, [doc, dirty, authenticated, busy, saveError]);
   const workspace = useRef<HTMLDivElement>(null);
   const previewPane = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const snapshot = live.current;
+    if (!snapshot.name || hasChanges(snapshot)) return;
+    api<Paper>("/api/papers/" + encodeURIComponent(snapshot.name))
+      .then((paper) => {
+        if (live.current !== snapshot) return;
+        const appearance = paper.appearance
+          ? validateAppearance(paper.appearance)
+          : appearanceOf(snapshot);
+        const next = {
+          ...snapshot,
+          ...appearance,
+          source: paper.content,
+          saved: paper.content,
+          revision: paper.revision,
+          savedAppearance: appearanceKey(appearance),
+        };
+        live.current = next;
+        setDoc(next);
+      })
+      .catch((e) =>
+        notify("无法检查服务器上的最新文章：" + (e as Error).message),
+      );
+  }, []);
   async function refreshHistory() {
     try {
       setFiles(await api("/api/papers"));
@@ -241,6 +288,7 @@ export default function App() {
       }
     };
     const keys = (e: KeyboardEvent) => {
+      if (!activeRef.current) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         requestSave();
@@ -355,9 +403,10 @@ export default function App() {
       setDialog("save");
     } else void save(live.current.name);
   }
-  async function save(name: string) {
+  async function save(name: string, automatic = false) {
     if (saving.current) return;
     saving.current = true;
+    setSaveError("");
     setBusy("保存中");
     const snapshot = live.current;
     try {
@@ -378,15 +427,20 @@ export default function App() {
         saved: snapshot.source,
         savedAppearance: appearanceKey(snapshot),
       };
+      // A slow response must never replace a different article opened meanwhile.
+      if (live.current.name !== snapshot.name) return;
       live.current = next;
       setDoc(next);
       try {
         localStorage.setItem("markdown-studio-draft", JSON.stringify(next));
       } catch {}
-      setDialog(null);
-      notify("已保存到 paper/" + r.name);
+      if (!automatic) {
+        setDialog(null);
+        notify("已保存到服务器：" + r.name);
+      }
       void refreshHistory();
     } catch (e) {
+      setSaveError((e as Error).message);
       notify((e as Error).message);
     } finally {
       saving.current = false;
@@ -403,6 +457,7 @@ export default function App() {
     setBusy("打开文章");
     try {
       const paper = await api<Paper>("/api/papers/" + encodeURIComponent(name));
+      setSaveError("");
       let appearance: Appearance = {
         theme: "forest",
         custom: null,
@@ -446,6 +501,20 @@ export default function App() {
     setThemesOpen(false);
     setDialog("new");
   }
+  const handledEntry = useRef<number | null>(null);
+  useEffect(() => {
+    if (!active || busy || handledEntry.current === entry.id) return;
+    handledEntry.current = entry.id;
+    setThemesOpen(false);
+    setMenu(false);
+    setDialog(null);
+    if (entry.action === "new") newPaper();
+    if (entry.action === "open") {
+      setHistoryError("");
+      void refreshHistory();
+      setDialog("open");
+    }
+  }, [active, entry, busy]);
   async function createPaper() {
     if (saving.current || busy) return;
     if (!newTitle.trim()) {
@@ -504,6 +573,7 @@ export default function App() {
         revision: result.revision,
         savedAppearance: appearanceKey(appearance),
       };
+      setSaveError("");
       live.current = next;
       setDoc(next);
       setDialog(null);
@@ -520,6 +590,7 @@ export default function App() {
   }
   async function importFile(file: File) {
     if (busy || !safeSwitch()) return;
+    setSaveError("");
     if (file.size > 2 * 1024 * 1024) {
       notify("Markdown 文件不能超过 2 MB");
       return;
@@ -625,7 +696,7 @@ export default function App() {
             : "HTML 已下载，可离线查看。",
         );
       } else {
-        const r = await fetch("/api/pdf", {
+        const r = await authFetch("/api/pdf", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ html }),
@@ -666,20 +737,72 @@ export default function App() {
       data-color-mode={darkMode ? "dark" : "light"}
     >
       <header className="app-header">
-        <div className="brand">
+        <button
+          className="brand brand-home"
+          onClick={onHome}
+          aria-label="返回首页"
+          title="返回首页"
+        >
           <span className="brand-mark">M</span>
           <span>Markdown 编辑器</span>
-        </div>
+        </button>
         <div className="document-info">
           <span className="document-name" title={doc.name || "首次保存时命名"}>
             {doc.name || "未命名文章.md"}
           </span>
           <span className={"save-status " + (dirty ? "unsaved" : "")}>
             <i />
-            {dirty ? "未保存" : doc.name ? "已保存" : "新文章"}
+            {busy === "保存中"
+              ? "保存中…"
+              : dirty
+                ? saveError
+                  ? "保存失败，请手动重试"
+                  : doc.name
+                    ? "等待自动保存"
+                    : "未保存"
+                : doc.name
+                  ? "已保存"
+                  : "新文章"}
           </span>
         </div>
         <div className="header-actions">
+          <button
+            title="账号设置"
+            aria-label="账号设置"
+            disabled={!!busy}
+            onClick={onAccount}
+          >
+            账号
+          </button>
+          <button
+            title="下载完整备份"
+            aria-label="下载完整备份"
+            disabled={!!busy}
+            onClick={async () => {
+              setBusy("生成备份");
+              try {
+                const response = await authFetch("/api/backup");
+                if (!response.ok)
+                  throw new Error((await response.json()).error || "备份失败");
+                download(await response.blob(), "markdown-backup.tar.gz");
+                notify("完整备份已下载，请保存到自己的电脑。");
+              } catch (e) {
+                notify((e as Error).message);
+              } finally {
+                setBusy("");
+              }
+            }}
+          >
+            <Download size={17} />
+          </button>
+          <button
+            title="退出登录"
+            aria-label="退出登录"
+            disabled={!!busy}
+            onClick={onLogout}
+          >
+            退出
+          </button>
           <button
             className="history-trigger"
             aria-label="文章历史"
@@ -1308,6 +1431,11 @@ export default function App() {
             {dialog === "open" && (
               <>
                 <p className="muted">项目 paper 文件夹中的文章</p>
+                {historyError && (
+                  <p className="history-error" role="alert">
+                    {historyError}
+                  </p>
+                )}
                 <div className="file-list">
                   {files.length ? (
                     files.map((f) => (

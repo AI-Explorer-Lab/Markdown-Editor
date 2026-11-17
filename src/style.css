@@ -1905,3 +1905,102 @@ kbd {
     border-radius: 0;
   }
 }
+/* The authenticated workspace stays mounted so a revoked session cannot discard edits. */
+[hidden] {
+  display: none !important;
+}
+.login-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: #f4f6f3;
+  color: #26382f;
+}
+.login-card {
+  width: min(100%, 390px);
+  padding: 36px;
+  border: 1px solid #dfe6df;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 16px 60px #1c372b0a;
+}
+.login-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #325c46;
+  color: white;
+  font:
+    bold 25px Georgia,
+    serif;
+}
+.login-card h1 {
+  font-size: 23px;
+  margin: 20px 0 8px;
+}
+.login-card p {
+  font-size: 14px;
+  color: #65756b;
+  margin-bottom: 24px;
+}
+.login-card label {
+  display: block;
+  font-size: 14px;
+  margin: 18px 0;
+}
+.login-card input {
+  width: 100%;
+  box-sizing: border-box;
+  display: block;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border: 1px solid #cbd7cc;
+  border-radius: 8px;
+  background: white;
+  color: #26382f;
+  font: inherit;
+}
+.login-card input:focus {
+  outline: 2px solid #719580;
+  outline-offset: 2px;
+}
+.login-card button {
+  width: 100%;
+  padding: 12px;
+  background: #325c46;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.login-card button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.login-card small {
+  display: block;
+  margin-top: 18px;
+  color: #78847c;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.login-card .login-error {
+  color: #a53232;
+  margin: 12px 0;
+}
+.account-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  overflow-y: auto;
+  background: #18291e66;
+}
+.login-card .account-cancel {
+  margin-top: 10px;
+  background: #edf2ee;
+  color: #325c46;
+}

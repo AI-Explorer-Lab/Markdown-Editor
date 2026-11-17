@@ -1,10 +1,10 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 
 test("dark editor keeps single-line and multiline selections visible, including after blur", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await page.goto("/");
+  await page.goto("/#editor");
   const editor = page.getByRole("textbox", { name: "Markdown 源码" });
   await editor.fill("第一行选中文字\n第二行选中文字");
   await page.getByRole("button", { name: "切换到黑暗模式", exact: true }).click();
@@ -41,7 +41,7 @@ test("interface dark mode persists and leaves article and clipboard styling unch
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.emulateMedia({ colorScheme: "light" });
-  await page.goto("/");
+  await page.goto("/#editor");
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill("# 标题\n\n## 子标题\n\n**正文** 与内容");

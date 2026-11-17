@@ -1,5 +1,5 @@
 import { openThemes } from "./theme-panel";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 import fs from "node:fs/promises";
 import path from "node:path";
 const setSource = async (page: any, source: string) => {
@@ -12,7 +12,7 @@ test("editor renders all syntax and distinct themes without changing source", as
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/#editor");
   await expect(page.locator(".article .diagram svg")).toBeVisible();
   await expect(page.locator(".article .diagram svg")).toContainText("记录灵感");
   await openThemes(page);
@@ -78,7 +78,7 @@ test("first save binds a file and keyboard save overwrites it; upload survives r
   const name = "e2e-" + Date.now();
   let asset = "";
   try {
-    await page.goto("/");
+    await page.goto("/#editor");
     await setSource(page, "# 保存验证\n\nfirst");
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await page.getByRole("textbox", { name: "文件名" }).fill(name);
@@ -124,7 +124,7 @@ test("first save binds a file and keyboard save overwrites it; upload survives r
 test("HTML embeds images and formulas; PDF is a real downloadable document", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   await setSource(
     page,
     "# 导出验证\n\n公式 $x^2$\n\n```mermaid\nflowchart LR\n A --> B\n```",
@@ -152,7 +152,7 @@ test("clipboard has separate rich HTML adapters and layout stays within viewport
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.goto("/");
+  await page.goto("/#editor");
   await setSource(page, "# 复制验证\n\n## 二级\n\n> 引用\n\n**重点**");
   await openThemes(page);
   await page.getByRole("button", { name: "海盐主题", exact: true }).click();
@@ -190,7 +190,7 @@ test("pasted and dropped images insert local resources; bad image and link remai
 }) => {
   const assets: string[] = [];
   try {
-    await page.goto("/");
+    await page.goto("/#editor");
     await setSource(page, "# 图片输入\n\n");
     for (const kind of ["paste", "drop"]) {
       await page
@@ -251,7 +251,7 @@ test("pasted and dropped images insert local resources; bad image and link remai
 test("one hundred headings and invalid formulas or diagrams stay isolated", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   await setSource(
     page,
     "# 文档\n\n$$\\unknownmacro{x}$$\n\n```mermaid\nthis is invalid\n```\n\n## 后续正文\n\n仍可编辑",

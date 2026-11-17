@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "node server/index.mjs",
-    "start": "NODE_ENV=production node server/index.mjs",
+    "start": "node --env-file-if-exists=.env server/production.mjs",
     "build": "tsc -b && vite build",
-    "test": "node --test tests/server.test.mjs && playwright test",
-    "test:server": "node --test tests/server.test.mjs"
+    "test": "npm run test:server && playwright test",
+    "test:server": "node --test tests/*.test.mjs",
+    "account": "node --env-file-if-exists=.env server/account.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.0",

@@ -1,8 +1,8 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 test("unified article navigation, customization preview and compact toolbar", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   await expect(
     page.getByRole("button", { name: "打开", exact: true }),
   ).toHaveCount(0);

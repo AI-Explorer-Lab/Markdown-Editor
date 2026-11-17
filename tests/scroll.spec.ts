@@ -1,9 +1,9 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 
 test("split view synchronizes both ways and can be disabled", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill(

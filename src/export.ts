@@ -1,4 +1,5 @@
 import { toPng } from "html-to-image";
+import { authFetch } from "./api";
 import JSZip from "jszip";
 import { isDark } from "./customThemes";
 import { normalizeWechatTextRuns } from "./wechat";
@@ -284,7 +285,7 @@ export async function bundle(source: string, name: string) {
     ...new Set(source.match(/assets\/[\w-]+\.(?:png|jpg|gif|webp)/g) || []),
   ];
   for (const ref of refs) {
-    const r = await fetch("/api/" + ref);
+    const r = await authFetch("/api/" + ref);
     if (!r.ok) throw new Error("找不到图片 " + ref);
     zip.file(ref, await r.blob());
   }

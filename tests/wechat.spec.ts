@@ -1,6 +1,6 @@
 import { openThemes } from "./theme-panel";
 import fs from "node:fs/promises";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 
 test("all themes copy to WeChat without gradients, nonstandard alignment or cramped line heights", async ({
   page,
@@ -16,7 +16,7 @@ test("all themes copy to WeChat without gradients, nonstandard alignment or cram
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/#editor");
   await expect(page.locator(".article")).toHaveAttribute("data-ready", "true");
   const source =
     "# 标题\n\n## 标题装饰\n\n段落 **加粗** 和 *斜体*。\n\n> 第一行引用\n>\n> 第二行引用\n\n- [x] 任务\n- 普通列表\n\n| 左 | 中 | 右 |\n| :-- | :-: | --: |\n| 一 | 二 | 三 |\n\n```js\nconst answer = 42;\nconsole.log(answer);\n```\n\n脚注[^1]\n\n[^1]: 脚注内容";
@@ -100,7 +100,7 @@ test("all themes copy to WeChat without gradients, nonstandard alignment or cram
 test("WeChat sets scalable line heights and logical alignment while HTML keeps original styles", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
@@ -180,7 +180,7 @@ test("reported amber article preserves readable nested mobile text", async ({
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/#editor");
   await openThemes(page);
   await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
   await page.getByRole("button", { name: "琥珀主题", exact: true }).click();

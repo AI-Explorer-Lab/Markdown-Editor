@@ -1,0 +1,16 @@
+[Unit]
+Description=Verified Markdown daily backup and retention
+Requires=markdown-editor.service
+After=markdown-editor.service
+
+[Service]
+Type=oneshot
+User=markdown-editor
+Group=markdown-editor
+WorkingDirectory=/opt/markdown-editor/app
+EnvironmentFile=/etc/markdown-editor.env
+ExecStart=/opt/markdown-editor/node/bin/node server/backup-cli.mjs
+TimeoutStartSec=11min
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true

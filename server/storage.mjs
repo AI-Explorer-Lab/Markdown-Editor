@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { replaceFile } from "./file-io.mjs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 export class StorageError extends Error {
@@ -129,13 +130,13 @@ export function createStore(root) {
         await fs.writeFile(styleTemp, JSON.stringify(nextAppearance), {
           flag: "wx",
         });
-        await fs.rename(styleTemp, style);
+        await replaceFile(styleTemp, style);
         styleWritten = true;
-        await fs.rename(temp, f);
+        await replaceFile(temp, f);
       } catch (error) {
         if (styleWritten) {
           await fs.writeFile(styleTemp, JSON.stringify(oldAppearance));
-          await fs.rename(styleTemp, style);
+          await replaceFile(styleTemp, style);
         }
         throw error;
       } finally {
@@ -170,5 +171,10 @@ export function createStore(root) {
       throw new StorageError("assets 不能是符号链接");
     return dir;
   }
-  return { read, save, list, assets };
+  function exclusive(job) {
+    const result = queue.then(job);
+    queue = result.catch(() => {});
+    return result;
+  }
+  return { read, save, list, assets, exclusive };
 }

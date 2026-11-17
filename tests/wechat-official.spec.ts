@@ -1,6 +1,6 @@
 import { openThemes } from "./theme-panel";
 import fs from "node:fs/promises";
-import { test, expect, type Browser } from "@playwright/test";
+import { test, expect, type Browser } from "./fixtures/auth";
 
 async function verify(browser: Browser, html: string) {
   const page = await browser.newPage();
@@ -20,7 +20,7 @@ test("official checker reproduces mixed-text failures; text runs fix them withou
   page,
   browser,
 }) => {
-  await page.goto("/");
+  await page.goto("/#editor");
   const { before, after } = await page.evaluate(async () => {
     const { normalizeWechatTextRuns } = await import("/src/wechat.ts");
     const root = document.createElement("article");
@@ -102,7 +102,7 @@ test("actual clipboard article passes the unmodified official checker across all
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/#editor");
   await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })

@@ -1,0 +1,24 @@
+[Unit]
+Description=Private Markdown editor
+After=network.target
+
+[Service]
+Type=simple
+User=markdown-editor
+Group=markdown-editor
+WorkingDirectory=/opt/markdown-editor/app
+EnvironmentFile=/etc/markdown-editor.env
+ExecStart=/opt/markdown-editor/node/bin/node server/production.mjs
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=markdown-editor
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/markdown-editor /var/backups/markdown-editor /run/markdown-editor
+
+[Install]
+WantedBy=multi-user.target

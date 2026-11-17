@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures/auth";
 import fs from "node:fs/promises";
 
 test("history restores file themes; new title creates immediately and collisions preserve existing files", async ({
@@ -29,7 +29,7 @@ test("history restores file themes; new title creates immediately and collisions
       ).ok(),
     ).toBeTruthy();
     await fs.writeFile(`paper/${legacy}.md`, "## 旧文章");
-    await page.goto("/");
+    await page.goto("/#editor");
     page.on("dialog", (d) => d.accept());
     await page.getByRole("button", { name: "文章历史", exact: true }).click();
     const history = page.getByRole("complementary", {

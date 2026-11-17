@@ -359,8 +359,60 @@ export function readLibrary(): SavedTheme[] {
     };
   });
 }
+type LibraryResponse = { themes: SavedTheme[]; revision: string };
+function cacheLibrary(themes: SavedTheme[]) {
+  // Validate using the same allowlist as local themes before exposing server data.
+  const previous = localStorage.getItem("markdown-studio-themes");
+  localStorage.setItem("markdown-studio-themes", JSON.stringify(themes));
+  try {
+    readLibrary();
+  } catch (e) {
+    if (previous === null) localStorage.removeItem("markdown-studio-themes");
+    else localStorage.setItem("markdown-studio-themes", previous);
+    throw e;
+  }
+  window.dispatchEvent(new Event("themes-synced"));
+}
+export async function syncLibrary() {
+  let remote = await api<LibraryResponse>("/api/themes");
+  let local: SavedTheme[] = [];
+  try {
+    local = readLibrary();
+  } catch {
+    /* Server remains the source of truth. */
+  }
+  if (
+    !remote.themes.length &&
+    local.length &&
+    !localStorage.getItem("markdown-studio-themes-migrated")
+  ) {
+    remote = await api<LibraryResponse>("/api/themes", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ themes: local, baseRevision: remote.revision }),
+    });
+  }
+  cacheLibrary(remote.themes);
+  localStorage.setItem("markdown-studio-themes-migrated", "true");
+  return remote.themes;
+}
+export async function persistLibrary(
+  transform: (themes: SavedTheme[]) => SavedTheme[],
+) {
+  const current = await api<LibraryResponse>("/api/themes");
+  const themes = transform(current.themes);
+  if (themes.length > 100) throw new Error("最多保存 100 个主题");
+  const result = await api<LibraryResponse>("/api/themes", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ themes, baseRevision: current.revision }),
+  });
+  cacheLibrary(result.themes);
+  return result.themes;
+}
 export function isDark(color: string) {
   const match = color.match(/[\d.]+/g);
   if (!match || match.length < 3) return false;
   return +match[0] * 0.2126 + +match[1] * 0.7152 + +match[2] * 0.0722 < 100;
 }
+import { api } from "./api";

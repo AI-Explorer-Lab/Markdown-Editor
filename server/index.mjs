@@ -6,10 +6,28 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 import { createStore, StorageError } from "./storage.mjs";
+import { createAuth } from "./auth.mjs";
+import { createSettings } from "./settings.mjs";
+import { createBackup } from "./backup.mjs";
+import http from "node:http";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.PORT || 5173);
 const app = express();
-const store = createStore(path.join(root, "paper"));
+const dataDir = path.resolve(process.env.DATA_DIR || path.join(root, "paper"));
+const publicURL = process.env.PUBLIC_URL
+  ? new URL(process.env.PUBLIC_URL)
+  : null;
+const auth = createAuth(path.join(dataDir, ".private"), {
+  secure: publicURL?.protocol === "https:",
+  cookiePath: publicURL?.pathname || "/",
+});
+const store = createStore(dataDir);
+const settings = createSettings(dataDir);
+const backup = createBackup(
+  dataDir,
+  path.resolve(process.env.BACKUP_DIR || path.join(root, "backups")),
+);
+if (process.env.TRUST_PROXY === "1") app.set("trust proxy", "loopback");
 await fs
   .copyFile(
     path.join(root, "public/sample-lake.png"),
@@ -21,16 +39,55 @@ await fs
   });
 app.disable("x-powered-by");
 app.use((req, res, next) => {
-  const hosts = [`localhost:${port}`, `127.0.0.1:${port}`];
+  const hosts = [
+    `localhost:${port}`,
+    `127.0.0.1:${port}`,
+    ...(publicURL ? [publicURL.host] : []),
+  ];
   if (!hosts.includes(req.headers.host))
-    return res.status(403).json({ error: "仅允许本机访问" });
+    return res.status(403).json({ error: "访问域名未授权" });
   const origin = req.headers.origin;
-  if (origin && !hosts.some((h) => origin === `http://${h}`))
+  const origins = publicURL
+    ? [publicURL.origin]
+    : hosts.map((h) => `http://${h}`);
+  const homepageNavigation =
+    req.method === "GET" &&
+    req.path === "/" &&
+    req.headers["sec-fetch-mode"] === "navigate" &&
+    req.headers["sec-fetch-dest"] === "document";
+  if (
+    (origin && !origins.includes(origin)) ||
+    (req.headers["sec-fetch-site"] === "cross-site" && !homepageNavigation)
+  )
     return res.status(403).json({ error: "拒绝跨站请求" });
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  if (req.path.startsWith("/api")) res.setHeader("Cache-Control", "no-store");
   next();
 });
 app.use("/api", express.json({ limit: "25mb" }));
+app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.post("/api/auth/login", auth.login);
+app.post("/api/auth/logout", auth.logout);
+app.use("/api", async (req, res, next) => {
+  const username = await auth.authenticate(req, res);
+  if (!username) return res.status(401).json({ error: "请先登录" });
+  req.username = username;
+  next();
+});
+app.get("/api/auth/session", (req, res) =>
+  res.json({ username: req.username }),
+);
+app.post("/api/auth/account", auth.changeAccount);
+app.get("/api/themes", async (req, res) => res.json(await settings.read()));
+app.put("/api/themes", async (req, res) =>
+  res.json(await store.exclusive(() => settings.save(req.body))),
+);
+app.get("/api/backup", async (req, res) => {
+  const file = await store.exclusive(() => backup.run());
+  res.download(file, "markdown-backup.tar.gz");
+});
 app.get("/api/papers", async (req, res) => res.json(await store.list()));
 app.get("/api/papers/:name", async (req, res) =>
   res.json(await store.read(req.params.name)),
@@ -59,7 +116,9 @@ app.post("/api/images", upload.single("image"), async (req, res) => {
   if (!ext)
     throw new StorageError("支持 PNG、JPEG、WebP、GIF 图片，单张不超过 12 MB");
   const name = randomUUID() + "." + ext;
-  await fs.writeFile(path.join(await store.assets(), name), b, { flag: "wx" });
+  await store.exclusive(async () =>
+    fs.writeFile(path.join(await store.assets(), name), b, { flag: "wx" }),
+  );
   res.json({ path: "assets/" + name });
 });
 app.get("/api/assets/:name", async (req, res) => {
@@ -126,3 +185,24 @@ if (process.env.NODE_ENV === "production") {
 app.listen(port, "127.0.0.1", () =>
   console.log(`Markdown 编辑器 http://localhost:${port}`),
 );
+if (process.env.BACKUP_SOCKET) {
+  const socket = process.env.BACKUP_SOCKET;
+  const internal = http.createServer(async (req, res) => {
+    if (req.method !== "POST" || req.url !== "/backup") {
+      res.writeHead(404).end();
+      return;
+    }
+    try {
+      const file = await store.exclusive(() => backup.run());
+      console.log("备份及保留策略执行成功：" + path.basename(file));
+      res.end(JSON.stringify({ file }));
+    } catch (e) {
+      console.error("备份失败：" + e.message);
+      res
+        .writeHead(500)
+        .end(JSON.stringify({ error: "备份失败，请检查服务日志" }));
+    }
+  });
+  await fs.rm(socket, { force: true });
+  internal.listen(socket, () => fs.chmod(socket, 0o600));
+}

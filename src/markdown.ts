@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { apiURL } from "./api";
 import anchor from "markdown-it-anchor";
 import footnote from "markdown-it-footnote";
 import tasks from "markdown-it-task-lists";
@@ -107,7 +108,7 @@ const image = md.renderer.rules.image!;
 md.renderer.rules.image = (tokens, i, options, env, self) => {
   const t = tokens[i];
   const source = t.attrGet("src") || "";
-  if (source.startsWith("assets/")) t.attrSet("src", "/api/" + source);
+  if (source.startsWith("assets/")) t.attrSet("src", apiURL("/api/" + source));
   t.attrSet("loading", "lazy");
   const result = image(tokens, i, options, env, self);
   const title = t.attrGet("title");

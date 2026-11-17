@@ -6,3 +6,7 @@
 /playwright-report/
 *.tsbuildinfo
 .DS_Store
+/backups/
+/.secrets/
+/.deploy/
+.env

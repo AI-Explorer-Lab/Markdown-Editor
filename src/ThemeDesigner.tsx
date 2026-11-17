@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   fields,
   readLibrary,
+  persistLibrary,
   validateAppearance,
   validateTheme,
   type Appearance,
@@ -130,7 +131,15 @@ export function ThemeDesigner({
         }
     };
     window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
+    const refreshed = () => {
+      setLibrary(readLibrary());
+      setLibraryError(false);
+    };
+    window.addEventListener("themes-synced", refreshed);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("themes-synced", refreshed);
+    };
   }, []);
   useEffect(() => {
     if (!preview) return;
@@ -220,16 +229,13 @@ export function ThemeDesigner({
     setEditing(true);
     onChange({ theme: "blank", custom, fontSize: 16, lineHeight: 1.8 });
   }
-  function persist(transform: (current: SavedTheme[]) => SavedTheme[]) {
+  async function persist(transform: (current: SavedTheme[]) => SavedTheme[]) {
     if (libraryError) {
       notify("主题库数据异常，暂时不能覆盖保存。");
       return false;
     }
     try {
-      const next = transform(readLibrary());
-      if (next.length > 100)
-        throw new Error("最多保存 100 个主题，请先导出并整理主题库。");
-      localStorage.setItem("markdown-studio-themes", JSON.stringify(next));
+      const next = await persistLibrary(transform);
       setLibrary(next);
       return true;
     } catch (e) {
@@ -237,7 +243,7 @@ export function ThemeDesigner({
       return false;
     }
   }
-  function save(update: boolean) {
+  async function save(update: boolean) {
     try {
       const next = validateTheme({ ...config, name });
       const id = update && selected ? selected : crypto.randomUUID();
@@ -248,7 +254,7 @@ export function ThemeDesigner({
         lineHeight: appearance.lineHeight,
       };
       if (
-        persist((items) => {
+        await persist((items) => {
           if (update && !items.some((t) => t.id === id))
             throw new Error("原主题已删除，请另存为新主题。");
           return update
@@ -283,7 +289,7 @@ export function ThemeDesigner({
         fontSize: a.fontSize,
         lineHeight: a.lineHeight,
       };
-      if (persist((items) => [...items, entry])) {
+      if (await persist((items) => [...items, entry])) {
         setTab("mine");
         notify("主题已导入，可在我的主题中应用。");
       }
@@ -460,9 +466,11 @@ export function ThemeDesigner({
                     </button>
                     <button
                       aria-label={"删除 " + t.config.name}
-                      onClick={() => {
+                      onClick={async () => {
                         if (
-                          persist((items) => items.filter((x) => x.id !== t.id))
+                          await persist((items) =>
+                            items.filter((x) => x.id !== t.id),
+                          )
                         ) {
                           if (selected === t.id) setSelected(null);
                           notify("已删除主题库条目，文章排版不变。");
@@ -481,8 +489,8 @@ export function ThemeDesigner({
                 导入主题文件
               </button>
               <p className="theme-hint">
-                主题库保存在当前浏览器；导出 JSON
-                可备份或迁移。文章样式随文章单独保存。
+                主题库保存在服务器，登录后可跨设备使用；导出 JSON
+                可单独备份。文章样式随文章单独保存。
               </p>
             </div>
           )}

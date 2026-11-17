@@ -7,7 +7,7 @@ const b = await chromium.launch({
 });
 try {
   const p = await b.newPage({ viewport: { width: 1586, height: 992 } });
-  await p.goto("http://127.0.0.1:5173");
+  await p.goto("http://127.0.0.1:5173/#editor");
   await p.locator(".article[data-ready=true]").waitFor();
   await p.locator(".article .diagram svg").waitFor();
   await p.screenshot({ path: "plan/design/implemented-desktop.png" });
