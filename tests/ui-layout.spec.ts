@@ -3,6 +3,7 @@ test("unified article navigation, customization preview and compact toolbar", as
   page,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "打开", exact: true }),
   ).toHaveCount(0);

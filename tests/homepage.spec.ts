@@ -110,6 +110,9 @@ test("new article intent survives login, saves, and returns to homepage", async 
   await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
   await expect(editor).toContainText("需要保留的内容");
   await page.reload();
+  await expect(page.locator(".home-page")).toBeVisible();
+  await expect(page.locator(".app-shell")).toHaveCount(0);
+  await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
   await expect(editor).toContainText("需要保留的内容");
   await page.getByRole("button", { name: "返回首页", exact: true }).click();
   await page.goBack();
@@ -213,6 +216,9 @@ test("login can return home and mobile can enter the editor", async ({
 test("article contents links stay inside the editor", async ({ page }) => {
   await login(page);
   await page.goto("/#editor");
+  await expect(page.locator(".home-page")).toBeVisible();
+  await expect(page.locator(".app-shell")).toHaveCount(0);
+  await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Markdown 源码" });
   await editor.fill("# 测试目录\n\n[TOC]\n\n## 第一节\n\n正文");
   await page
@@ -223,6 +229,9 @@ test("article contents links stay inside the editor", async ({ page }) => {
   await expect(page.locator(".home-page")).toHaveCount(0);
   page.on("dialog", (dialog) => dialog.accept());
   await page.reload();
+  await expect(page.locator(".home-page")).toBeVisible();
+  await expect(page.locator(".app-shell")).toHaveCount(0);
+  await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
   await expect(editor).toBeVisible();
 });
 

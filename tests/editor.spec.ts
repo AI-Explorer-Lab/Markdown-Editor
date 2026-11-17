@@ -13,6 +13,7 @@ test("editor renders all syntax and distinct themes without changing source", as
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await expect(page.locator(".article .diagram svg")).toBeVisible();
   await expect(page.locator(".article .diagram svg")).toContainText("记录灵感");
   await openThemes(page);
@@ -79,6 +80,7 @@ test("first save binds a file and keyboard save overwrites it; upload survives r
   let asset = "";
   try {
     await page.goto("/#editor");
+    await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
     await setSource(page, "# 保存验证\n\nfirst");
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await page.getByRole("textbox", { name: "文件名" }).fill(name);
@@ -109,6 +111,7 @@ test("first save binds a file and keyboard save overwrites it; upload survives r
     await page.keyboard.press("Meta+s");
     await expect(page.locator(".save-status")).toHaveText("已保存");
     await page.reload();
+    await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
     await expect(page.locator(".article img")).toBeVisible();
     expect(
       (await fs.readdir("paper")).filter((n) => n === name + ".md"),
@@ -125,6 +128,7 @@ test("HTML embeds images and formulas; PDF is a real downloadable document", asy
   page,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await setSource(
     page,
     "# 导出验证\n\n公式 $x^2$\n\n```mermaid\nflowchart LR\n A --> B\n```",
@@ -153,6 +157,7 @@ test("clipboard has separate rich HTML adapters and layout stays within viewport
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await setSource(page, "# 复制验证\n\n## 二级\n\n> 引用\n\n**重点**");
   await openThemes(page);
   await page.getByRole("button", { name: "海盐主题", exact: true }).click();
@@ -191,6 +196,7 @@ test("pasted and dropped images insert local resources; bad image and link remai
   const assets: string[] = [];
   try {
     await page.goto("/#editor");
+    await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
     await setSource(page, "# 图片输入\n\n");
     for (const kind of ["paste", "drop"]) {
       await page
@@ -252,6 +258,7 @@ test("one hundred headings and invalid formulas or diagrams stay isolated", asyn
   page,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await setSource(
     page,
     "# 文档\n\n$$\\unknownmacro{x}$$\n\n```mermaid\nthis is invalid\n```\n\n## 后续正文\n\n仍可编辑",

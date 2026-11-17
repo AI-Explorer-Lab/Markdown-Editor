@@ -5,6 +5,7 @@ test("dark editor keeps single-line and multiline selections visible, including 
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Markdown 源码" });
   await editor.fill("第一行选中文字\n第二行选中文字");
   await page.getByRole("button", { name: "切换到黑暗模式", exact: true }).click();
@@ -42,6 +43,7 @@ test("interface dark mode persists and leaves article and clipboard styling unch
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill("# 标题\n\n## 子标题\n\n**正文** 与内容");
@@ -79,6 +81,7 @@ test("interface dark mode persists and leaves article and clipboard styling unch
     await page.getByRole("textbox", { name: "Markdown 源码" }).innerText(),
   ).toBe(source);
   await page.reload();
+  await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
   await expect(page.locator(".app-shell")).toHaveAttribute(
     "data-color-mode",
     "dark",

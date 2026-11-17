@@ -9,6 +9,7 @@ test("custom colors follow overrides, cancel restores, sample preserves source a
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await openThemes(page);
   await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
   await page.getByRole("button", { name: "素白主题", exact: true }).click();
@@ -86,6 +87,7 @@ test("theme library imports validate, snapshots survive a fresh browser and libr
   const name = "theme-e2e-" + Date.now();
   try {
     await page.goto("/#editor");
+    await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
     await openThemes(page);
     await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
     await page.getByRole("button", { name: "基于此主题定制" }).click();
@@ -154,6 +156,7 @@ test("theme library imports validate, snapshots survive a fresh browser and libr
     );
     const other = await fresh.newPage();
     await other.goto((process.env.TEST_BASE_URL || "http://127.0.0.1:5173") + "/#editor");
+    await other.getByRole("button", { name: "进入编辑器", exact: true }).click();
     other.on("dialog", (d) => d.accept());
     await other.getByRole("button", { name: "文章历史", exact: true }).click();
     await other.getByRole("button", { name: new RegExp(name) }).click();
@@ -194,6 +197,7 @@ test("custom dark paper uses export conversion without false image warnings", as
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
@@ -230,6 +234,7 @@ test("independent custom theme survives reload and has no builtin description", 
   page,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill("# 标题\n\n## 子标题\n\n> 引用");
@@ -272,6 +277,7 @@ test("independent custom theme survives reload and has no builtin description", 
     )
     .toBe("blank");
   await page.reload();
+  await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
   await expect(page.locator(".preview-pane .article")).toHaveAttribute(
     "data-theme",
     "blank",

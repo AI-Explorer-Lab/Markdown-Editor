@@ -17,6 +17,7 @@ test("all themes copy to WeChat without gradients, nonstandard alignment or cram
     });
   });
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await expect(page.locator(".article")).toHaveAttribute("data-ready", "true");
   const source =
     "# 标题\n\n## 标题装饰\n\n段落 **加粗** 和 *斜体*。\n\n> 第一行引用\n>\n> 第二行引用\n\n- [x] 任务\n- 普通列表\n\n| 左 | 中 | 右 |\n| :-- | :-: | --: |\n| 一 | 二 | 三 |\n\n```js\nconst answer = 42;\nconsole.log(answer);\n```\n\n脚注[^1]\n\n[^1]: 脚注内容";
@@ -101,6 +102,7 @@ test("WeChat sets scalable line heights and logical alignment while HTML keeps o
   page,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
@@ -181,6 +183,7 @@ test("reported amber article preserves readable nested mobile text", async ({
     });
   });
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await openThemes(page);
   await page.getByRole("textbox", { name: "Markdown 源码" }).fill(source);
   await page.getByRole("button", { name: "琥珀主题", exact: true }).click();

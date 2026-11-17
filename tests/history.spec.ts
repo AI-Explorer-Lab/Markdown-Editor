@@ -30,6 +30,7 @@ test("history restores file themes; new title creates immediately and collisions
     ).toBeTruthy();
     await fs.writeFile(`paper/${legacy}.md`, "## 旧文章");
     await page.goto("/#editor");
+    await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
     page.on("dialog", (d) => d.accept());
     await page.getByRole("button", { name: "文章历史", exact: true }).click();
     const history = page.getByRole("complementary", {

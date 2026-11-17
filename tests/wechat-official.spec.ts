@@ -21,6 +21,7 @@ test("official checker reproduces mixed-text failures; text runs fix them withou
   browser,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   const { before, after } = await page.evaluate(async () => {
     const { normalizeWechatTextRuns } = await import("/src/wechat.ts");
     const root = document.createElement("article");
@@ -103,6 +104,7 @@ test("actual clipboard article passes the unmodified official checker across all
     });
   });
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await openThemes(page);
   await page
     .getByRole("textbox", { name: "Markdown 源码" })

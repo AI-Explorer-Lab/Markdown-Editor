@@ -4,6 +4,7 @@ test("split view synchronizes both ways and can be disabled", async ({
   page,
 }) => {
   await page.goto("/#editor");
+  await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Markdown 源码" })
     .fill(

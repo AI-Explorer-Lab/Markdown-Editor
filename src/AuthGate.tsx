@@ -5,7 +5,7 @@ import { syncLibrary } from "./customThemes";
 const App = lazy(() => import("./App"));
 const isEditorLocation = () => !!location.hash && location.hash !== "#home";
 export default function AuthGate() {
-  const [editorOpen, setEditorOpen] = useState(isEditorLocation);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [entry, setEntry] = useState<EditorEntry>({ action: "resume", id: 0 });
   const [user, setUser] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -24,6 +24,12 @@ export default function AuthGate() {
     setUser(name);
   }
   useEffect(() => {
+    // A fresh visit always starts at home, including old editor bookmarks.
+    window.history.replaceState(
+      window.history.state,
+      "",
+      location.pathname + location.search + "#home",
+    );
     const navigate = () => {
       setEditorOpen(isEditorLocation());
       setAccountOpen(false);

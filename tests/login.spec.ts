@@ -14,6 +14,7 @@ test("login, automatic save, another device, conflict, backup download and logou
   let other;
   try {
     await page.goto("/#editor");
+    await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "登录", exact: true }),
     ).toBeVisible();
@@ -43,6 +44,7 @@ test("login, automatic save, another device, conflict, backup download and logou
       timeout: 10000,
     });
     await page.reload();
+    await page.getByRole("button", { name: "继续上次编辑", exact: true }).click();
     await expect(
       page.getByRole("textbox", { name: "Markdown 源码" }),
     ).toBeVisible();
@@ -50,6 +52,7 @@ test("login, automatic save, another device, conflict, backup download and logou
     await other.request.post("/api/auth/login", { data: credentials });
     const second = await other.newPage();
     await second.goto("/#editor");
+    await second.getByRole("button", { name: "进入编辑器", exact: true }).click();
     await second.getByRole("button", { name: "文章历史", exact: true }).click();
     second.on("dialog", (dialog) => dialog.accept());
     await second
@@ -135,6 +138,7 @@ test("account settings change credentials and revoke another browser", async ({
       data: { username, password },
     });
     await page.goto("/#editor");
+    await page.getByRole("button", { name: "进入编辑器", exact: true }).click();
     await page.getByRole("button", { name: "账号设置", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "账号设置" });
     await dialog.getByLabel("当前密码", { exact: true }).fill(password);
