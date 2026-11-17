@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import {
   fields,
   readLibrary,
@@ -754,7 +755,12 @@ export function ThemeDesigner({
         </button>
       </div>
       {preview && (
-        <div className="modal-shade">
+        <div
+          className="modal-shade"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setPreview(null);
+          }}
+        >
           <section
             className="modal theme-preview-modal"
             role="dialog"
@@ -765,10 +771,11 @@ export function ThemeDesigner({
               <h2>{preview === "sample" ? "样式示例" : "公众号复制效果"}</h2>
               <button
                 autoFocus
+                className="theme-preview-close"
                 aria-label="关闭效果预览"
                 onClick={() => setPreview(null)}
               >
-                ×
+                <X size={24} aria-hidden="true" />
               </button>
             </div>
             <p className="theme-hint">

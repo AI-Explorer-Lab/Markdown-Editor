@@ -1162,6 +1162,8 @@ export default function App({
           onApply={() => {
             if (themeCandidate) setDoc((d) => ({ ...d, ...themeCandidate }));
             setThemeCandidate(null);
+            setThemesOpen(false);
+            themeButton.current?.focus();
             notify("已应用这个风格");
           }}
           appearance={appearanceOf(doc)}

@@ -236,6 +236,7 @@ test("independent custom theme survives reload and has no builtin description", 
   await openThemes(page);
   await page.getByRole("button", { name: "夜航主题", exact: true }).click();
   await page.getByRole("button", { name: "应用这个风格", exact: true }).click();
+  await openThemes(page);
   await page.getByRole("tab", { name: /我的主题/ }).click();
   await page.getByRole("button", { name: "自定义", exact: true }).click();
   await expect(page.locator(".designer-heading")).toContainText("独立自定义");

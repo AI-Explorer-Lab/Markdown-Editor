@@ -33,6 +33,7 @@ test("unified article navigation, customization preview and compact toolbar", as
     "data-theme",
     "sea",
   );
+  await page.getByRole("button", { name: "主题", exact: true }).click();
   await page.getByRole("button", { name: "基于此主题定制" }).click();
   await expect(page.locator(".app-shell")).toHaveClass(/customizing/);
   const panel = await page.locator("#theme-popover").boundingBox();
