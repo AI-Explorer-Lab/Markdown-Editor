@@ -265,7 +265,7 @@ kbd {
   overflow: hidden;
 }
 .editor-host {
-  --editor-zoom: 1.1;
+  --editor-zoom: 1.32;
   /* Scale the editing surface without changing the article's typography. */
   zoom: var(--editor-zoom);
   height: 100%;
