@@ -1,10 +1,17 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import HomePage, { type EditorAction, type EditorEntry } from "./HomePage";
 import { api } from "./api";
+import {
+  readWorkbenchRequest,
+  receiveWorkbenchArticle,
+} from "./workbenchImport";
 import { syncLibrary } from "./customThemes";
 const App = lazy(() => import("./App"));
 const isEditorLocation = () => !!location.hash && location.hash !== "#home";
 export default function AuthGate() {
+  const [workbenchRequest] = useState(readWorkbenchRequest);
+  const [waitingForArticle, setWaitingForArticle] =
+    useState(!!workbenchRequest);
   const [editorOpen, setEditorOpen] = useState(false);
   const [entry, setEntry] = useState<EditorEntry>({ action: "resume", id: 0 });
   const [user, setUser] = useState("");
@@ -24,12 +31,29 @@ export default function AuthGate() {
     setUser(name);
   }
   useEffect(() => {
+    if (workbenchRequest) {
+      return receiveWorkbenchArticle(
+        workbenchRequest,
+        () => {
+          window.history.replaceState(
+            window.history.state,
+            "",
+            location.pathname + location.search + "#editor",
+          );
+          setWaitingForArticle(false);
+          setEditorOpen(true);
+        },
+        setError,
+      );
+    }
     // A fresh visit always starts at home, including old editor bookmarks.
     window.history.replaceState(
       window.history.state,
       "",
       location.pathname + location.search + "#home",
     );
+  }, [workbenchRequest]);
+  useEffect(() => {
     const navigate = () => {
       setEditorOpen(isEditorLocation());
       setAccountOpen(false);
@@ -77,7 +101,12 @@ export default function AuthGate() {
   }
   return (
     <>
-      {!editorOpen && <HomePage onEnter={openEditor} />}
+      {waitingForArticle && (
+        <p className="editor-loading" role="status">
+          {error || "正在接收工作台文章…"}
+        </p>
+      )}
+      {!waitingForArticle && !editorOpen && <HomePage onEnter={openEditor} />}
       {mounted && (
         <div hidden={!user || !editorOpen}>
           <Suspense

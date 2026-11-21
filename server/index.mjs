@@ -67,7 +67,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use("/api", express.json({ limit: "25mb" }));
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => res.json({ ok: true, workbenchImport: 1 }));
 app.post("/api/auth/login", auth.login);
 app.post("/api/auth/logout", auth.logout);
 app.use("/api", async (req, res, next) => {

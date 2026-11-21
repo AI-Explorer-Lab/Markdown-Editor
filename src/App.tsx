@@ -33,7 +33,7 @@ import {
 import { undo, redo } from "@codemirror/commands";
 import { Editor } from "./Editor";
 import { Preview } from "./Preview";
-import { themes, ThemeId, isThemeId } from "./themes";
+import { themes, ThemeId } from "./themes";
 import { NewThemePicker } from "./NewThemePicker";
 import { ThemeDesigner } from "./ThemeDesigner";
 import {
@@ -41,9 +41,18 @@ import {
   readLibrary,
   type SavedTheme,
   type Appearance,
-  type CustomTheme,
 } from "./customThemes";
 import { sample } from "./sample";
+import {
+  initial,
+  appearanceOf,
+  appearanceKey,
+  hasChanges,
+  rememberAppearance,
+  suggestedFilename,
+  persistDraft,
+  type Draft,
+} from "./draft";
 import type { EditorEntry } from "./HomePage";
 import { download, prepareArticle, htmlDocument, bundle } from "./export";
 type Paper = {
@@ -51,72 +60,6 @@ type Paper = {
   content: string;
   revision: string;
   appearance?: Appearance | null;
-};
-type Draft = {
-  source: string;
-  name: string;
-  revision: string | null;
-  saved: string;
-  theme: ThemeId;
-  custom: CustomTheme | null;
-  savedAppearance: string;
-  fontSize: number;
-  lineHeight: number;
-};
-const appearanceOf = (d: Appearance): Appearance => ({
-  theme: d.theme,
-  custom: d.custom,
-  fontSize: d.fontSize,
-  lineHeight: d.lineHeight,
-});
-const appearanceKey = (d: Appearance) => JSON.stringify(appearanceOf(d));
-const hasChanges = (d: Draft) =>
-  d.source !== d.saved || (!!d.name && appearanceKey(d) !== d.savedAppearance);
-const initial = (): Draft => {
-  try {
-    const d = JSON.parse(
-      localStorage.getItem("markdown-studio-draft") || "null",
-    );
-    if (d && typeof d.source === "string") {
-      let appearance: Appearance = {
-        theme: "forest",
-        custom: null,
-        fontSize: 16,
-        lineHeight: 1.8,
-      };
-      try {
-        appearance = validateAppearance({
-          theme: isThemeId(d.theme) ? d.theme : "forest",
-          custom: d.custom || null,
-          fontSize: d.fontSize,
-          lineHeight: d.lineHeight,
-        });
-      } catch {
-        /* Keep the user's text even when a stored style is invalid. */
-      }
-      return {
-        ...d,
-        ...appearance,
-        savedAppearance: d.savedAppearance || appearanceKey(appearance),
-      };
-    }
-  } catch {}
-  return {
-    source: sample,
-    name: "",
-    revision: null,
-    saved: sample,
-    theme: "forest",
-    custom: null,
-    savedAppearance: appearanceKey({
-      theme: "forest",
-      custom: null,
-      fontSize: 16,
-      lineHeight: 1.8,
-    }),
-    fontSize: 16,
-    lineHeight: 1.8,
-  };
 };
 export default function App({
   authenticated,
@@ -134,6 +77,15 @@ export default function App({
   onAccount: () => void;
 }) {
   const [doc, setDoc] = useState(initial);
+  const { theme, custom, fontSize, lineHeight } = doc;
+  useEffect(() => {
+    if (!active) return;
+    try {
+      rememberAppearance({ theme, custom, fontSize, lineHeight });
+    } catch {
+      // An unavailable browser store does not prevent editing.
+    }
+  }, [active, theme, custom, fontSize, lineHeight]);
   const [darkMode, setDarkMode] = useState(() => {
     try {
       const saved = localStorage.getItem("markdown-studio-color-mode");
@@ -273,7 +225,7 @@ export default function App({
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        localStorage.setItem("markdown-studio-draft", JSON.stringify(doc));
+        persistDraft(doc);
       } catch {
         notify("浏览器恢复草稿空间不足，请及时保存文件。");
       }
@@ -296,10 +248,7 @@ export default function App({
     };
     const flush = () => {
       try {
-        localStorage.setItem(
-          "markdown-studio-draft",
-          JSON.stringify(live.current),
-        );
+        persistDraft(live.current);
       } catch {}
     };
     window.addEventListener("pagehide", flush);
@@ -399,7 +348,7 @@ export default function App({
   function requestSave() {
     if (saving.current) return;
     if (!live.current.name) {
-      setSaveName("");
+      setSaveName(suggestedFilename(live.current.suggestedTitle));
       setDialog("save");
     } else void save(live.current.name);
   }
@@ -432,7 +381,7 @@ export default function App({
       live.current = next;
       setDoc(next);
       try {
-        localStorage.setItem("markdown-studio-draft", JSON.stringify(next));
+        persistDraft(next);
       } catch {}
       if (!automatic) {
         setDialog(null);
@@ -595,7 +544,14 @@ export default function App({
       notify("Markdown 文件不能超过 2 MB");
       return;
     }
-    setDoc((d) => ({ ...d, source: "", name: "", saved: "", revision: null }));
+    setDoc((d) => ({
+      ...d,
+      source: "",
+      name: "",
+      suggestedTitle: undefined,
+      saved: "",
+      revision: null,
+    }));
     const source = await file.text();
     setSource(source);
     setDialog(null);
@@ -668,7 +624,9 @@ export default function App({
   async function exportFile(format: "md" | "html" | "pdf" | "zip") {
     setMenu(false);
     if (busy) return;
-    const name = doc.name || "未命名文章.md";
+    const name =
+      doc.name ||
+      (suggestedFilename(doc.suggestedTitle) || "未命名文章") + ".md";
     if (format === "md") {
       download(
         new Blob([doc.source], { type: "text/markdown;charset=utf-8" }),
@@ -747,8 +705,11 @@ export default function App({
           <span>Markdown 编辑器</span>
         </button>
         <div className="document-info">
-          <span className="document-name" title={doc.name || "首次保存时命名"}>
-            {doc.name || "未命名文章.md"}
+          <span
+            className="document-name"
+            title={doc.name || doc.suggestedTitle || "首次保存时命名"}
+          >
+            {doc.name || doc.suggestedTitle || "未命名文章.md"}
           </span>
           <span className={"save-status " + (dirty ? "unsaved" : "")}>
             <i />
@@ -1236,6 +1197,7 @@ export default function App({
               setDoc((d) => ({
                 ...d,
                 source: sample,
+                suggestedTitle: undefined,
                 name: "",
                 saved: "",
                 revision: null,
